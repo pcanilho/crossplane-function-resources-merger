@@ -1,0 +1,159 @@
+name: CI
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+on:
+  push:
+    paths-ignore:
+      - README.md
+      - .gitignore
+    branches:
+      - main
+      - release-*
+  pull_request: {}
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version (e.g. v0.1.0)
+        required: false
+
+env:
+  GO_VERSION: '1.22.0'
+  GOLANGCI_VERSION: 'v1.54.2'
+  DOCKER_BUILDX_VERSION: 'v0.11.2'
+
+  XP_CHANNEL: master
+  XP_VERSION: current
+
+  XPKG: ghcr.io/${{ github.repository}}
+  XPKG_VERSION: ${{ inputs.version }}
+
+jobs:
+  lint:
+    timeout-minutes: 5
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ env.GOLANGCI_VERSION }}
+
+  unit-test:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1
+
+      - name: Prepare k8s Cluster
+        run: |
+            kubectl create namespace ephemeral
+            kubectl create cm map-1 -n ephemeral --from-literal=key1=a --from-literal=key2=a
+            kubectl create cm map-2 -n ephemeral --from-literal=key2=c --from-literal=key4=d
+
+      - name: Run Unit Tests
+        run: go test -v -cover ./...
+
+  build:
+    timeout-minutes: 5
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+          - linux
+        arch:
+          - amd64
+          - arm64
+    steps:
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: ${{ env.DOCKER_BUILDX_VERSION }}
+          install: true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Runtime
+        id: image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: ${{ matrix.os }}/${{ matrix.arch }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          target: image
+          build-args:
+            GO_VERSION=${{ env.GO_VERSION }}
+          outputs: type=docker,dest=runtime-${{ matrix.arch }}.tar
+
+      - name: Setup the Crossplane CLI
+        run: "curl -sL https://raw.githubusercontent.com/crossplane/crossplane/master/install.sh | sh"
+
+      - name: Build Package
+        run: ./crossplane xpkg build --package-file=${{ matrix.arch }}.xpkg --package-root=package/ --embed-runtime-image-tarball=runtime-${{ matrix.arch }}.tar
+
+      - name: Upload Single-Platform Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.arch }}
+          path: "*.xpkg"
+          if-no-files-found: error
+          retention-days: 1
+
+  push:
+    timeout-minutes: 5
+    runs-on: ubuntu-22.04
+    needs:
+      - build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Single-Platform Packages
+        uses: actions/download-artifact@v4
+        with:
+          path: .
+          merge-multiple: true
+
+      - name: Setup the Crossplane CLI
+        run: "curl -sL https://raw.githubusercontent.com/crossplane/crossplane/master/install.sh | sh"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set Default Multi-Platform Package Version
+        if: env.XPKG_VERSION == ''
+        run: echo "XPKG_VERSION=$(date -d@$(git show -s --format=%ct) +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)" >> $GITHUB_ENV
+
+      - name: Push Multi-Platform Package to the GitHub Container Registry
+        run: "./crossplane --verbose xpkg push --package-files $(echo *.xpkg|tr ' ' ,) ${{ env.XPKG }}:${{ env.XPKG_VERSION }}"

@@ -1,0 +1,10 @@
+---
+apiVersion: resource-merger.fn.canilho.net/v1alpha1
+kind: XR
+metadata:
+  name: merger-results-xr
+spec:
+  options:
+    override: true
+    appendSlice: true
+    sliceDeepCopy: true

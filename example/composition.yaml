@@ -1,0 +1,38 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: function-xresources-merger
+spec:
+  compositeTypeRef:
+    apiVersion: resource-merger.canilho.net/v1alpha1
+    kind: XR
+  mode: Pipeline
+  pipeline:
+  - step: run
+    functionRef:
+      name: function-xresources-merger
+    input:
+      apiVersion: template.fn.crossplane.io/v1beta1
+      kind: Input
+      targetRef:
+        namespace: ephemeral
+        name: merged
+        apiVersion: v1
+        kind: ConfigMap
+      resourceRefs:
+        - namespace: ephemeral
+          name: map-1
+          apiVersion: v1
+          kind: ConfigMap
+        - namespace: ephemeral
+          name: map-2
+          apiVersion: v1
+          kind: ConfigMap
+        - namespace: ephemeral
+          name: envcfg-1
+          apiVersion: apiextensions.crossplane.io/v1alpha1
+          kind: EnvironmentConfig
+        - namespace: ephemeral
+          name: envcfg-2
+          apiVersion: apiextensions.crossplane.io/v1alpha1
+          kind: EnvironmentConfig
