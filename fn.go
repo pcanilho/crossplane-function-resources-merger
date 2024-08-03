@@ -95,13 +95,19 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 			return rsp, nil
 		}
 
+		data, ok := uRes["data"].(map[string]any)
+		if !ok {
+			response.Fatal(rsp, errors.New("resource data is not a map"))
+			return rsp, nil
+		}
+
 		if mergedResource == nil {
-			mergedResource = uRes["data"].(map[string]any)
+			mergedResource = data
 			continue
 		}
 
 		existingData := mergedResource
-		toMergeData := uRes["data"].(map[string]any)
+		toMergeData := data
 		f.log.Info("Merging data [a←b]...", "a:len", len(existingData), "b:len", len(toMergeData))
 		if mergeErr := mergo.Merge(&existingData, toMergeData, maps.Values(mergoOpts)...); mergeErr != nil {
 			response.Fatal(rsp, errors.Wrap(mergeErr, "cannot merge resources"))
