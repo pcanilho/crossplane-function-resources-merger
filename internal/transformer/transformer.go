@@ -2,12 +2,12 @@
 package transformer
 
 import (
+	"fmt"
 	"strings"
 
+	"github.com/crossplane/function-sdk-go/resource"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/runtime"
-
-	"github.com/crossplane/function-sdk-go/resource"
 )
 
 type io = map[string]any
@@ -22,7 +22,7 @@ func Transform(xr *resource.Composite, in io) (io, error) {
 
 	out := in
 	transformerMap := map[string]func(io) io{
-		"stringToMap": transformData,
+		"stringToMap": transformToMap,
 	}
 
 	var xrConfig xrSpec
@@ -43,8 +43,8 @@ func Transform(xr *resource.Composite, in io) (io, error) {
 	return out, nil
 }
 
-// transformData transforms a map of strings to a map of any.
-func transformData(a map[string]any) map[string]any {
+// transformToMap transforms a map of strings to a map of any.
+func transformToMap(a map[string]any) map[string]any {
 	outData := make(map[string]any)
 	for k, v := range a {
 		if vs, ok := v.(string); ok {
@@ -55,6 +55,21 @@ func transformData(a map[string]any) map[string]any {
 			}
 		}
 		outData[k] = v
+	}
+	return outData
+}
+
+func TransformFromMap(a map[string]any) map[string]any {
+	outData := make(map[string]any)
+	for k, v := range a {
+		if vm, ok := v.(map[string]any); ok {
+			var buf strings.Builder
+			if err := yaml.NewEncoder(&buf).Encode(vm); err == nil {
+				outData[k] = buf.String()
+				continue
+			}
+		}
+		outData[k] = fmt.Sprint(v)
 	}
 	return outData
 }

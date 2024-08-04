@@ -4,6 +4,13 @@ import (
 	"context"
 
 	"dario.cat/mergo"
+	"github.com/crossplane/crossplane-runtime/pkg/errors"
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	fnv1beta1 "github.com/crossplane/function-sdk-go/proto/v1beta1"
+	"github.com/crossplane/function-sdk-go/request"
+	"github.com/crossplane/function-sdk-go/resource"
+	"github.com/crossplane/function-sdk-go/resource/composed"
+	"github.com/crossplane/function-sdk-go/response"
 	"github.com/pcanilho/crossplane-function-xresources-merger/input/v1alpha1"
 	"github.com/pcanilho/crossplane-function-xresources-merger/internal/k8s"
 	"github.com/pcanilho/crossplane-function-xresources-merger/internal/maps"
@@ -12,14 +19,6 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	fnv1beta1 "github.com/crossplane/function-sdk-go/proto/v1beta1"
-	"github.com/crossplane/function-sdk-go/request"
-	"github.com/crossplane/function-sdk-go/resource"
-	"github.com/crossplane/function-sdk-go/resource/composed"
-	"github.com/crossplane/function-sdk-go/response"
 )
 
 // Function returns whatever response you ask it to.
@@ -110,7 +109,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 
 		existingData := mergedResource
 		toMergeData := data
-		f.log.Info("Merging data [a←b]...", "a:len", len(existingData), "b:len", len(toMergeData))
+		f.log.Info("Merging data [a←b]...")
 		if mergeErr := mergo.Merge(&existingData, toMergeData, maps.Values(mergoOpts)...); mergeErr != nil {
 			response.Fatal(rsp, errors.Wrap(mergeErr, "cannot merge resources"))
 			return rsp, nil
@@ -120,6 +119,12 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 
 	target := in.TargetRef
 	gvk := target.Ref.GroupVersionKind()
+
+	// Conform with the v1.ConfigMap if selected
+	if gvk.String() == "/v1, Kind=ConfigMap" {
+		mergedResource = transformer.TransformFromMap(mergedResource)
+	}
+
 	runtimeObject := &unstructured.Unstructured{Object: map[string]any{"data": mergedResource}}
 	runtimeObject.SetGroupVersionKind(gvk)
 
