@@ -3,9 +3,10 @@ package merger
 
 import (
 	"dario.cat/mergo"
-	"github.com/crossplane/function-sdk-go/resource"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/crossplane/function-sdk-go/resource"
 )
 
 // ParseMergoOpts parses the options from the XR and returns a map of mergo options

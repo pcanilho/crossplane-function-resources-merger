@@ -1,16 +1,19 @@
+// Package transformer offers utility functions to transform data.
 package transformer
 
 import (
 	"strings"
 
-	"github.com/crossplane/function-sdk-go/resource"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/crossplane/function-sdk-go/resource"
 )
 
-type IO = map[string]any
+type io = map[string]any
 
-func Transform(xr *resource.Composite, in IO) (IO, error) {
+// Transform parses a given XR composite and applies any found settings by running the appropriate transformer.
+func Transform(xr *resource.Composite, in io) (io, error) {
 	type xrSpec struct {
 		Spec struct {
 			Transform map[string]bool
@@ -18,11 +21,12 @@ func Transform(xr *resource.Composite, in IO) (IO, error) {
 	}
 
 	out := in
-	transformerMap := map[string]func(IO) IO{
+	transformerMap := map[string]func(io) io{
 		"stringToMap": transformData,
 	}
 
 	var xrConfig xrSpec
+	//nolint: nilerr // Silently ignore not set transform settings
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(xr.Resource.Object, &xrConfig); err != nil {
 		return in, nil
 	}
