@@ -8,3 +8,5 @@ spec:
     override: true
     appendSlice: true
     sliceDeepCopy: true
+  transform:
+    stringToMap: true

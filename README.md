@@ -53,6 +53,8 @@ produces a single resulting resource containing the merged result.
          override: true
          appendSlice: true
          sliceDeepCopy: true
+       transform:
+         stringToMap: true
        ``` 
 4. Observe the merged resource.
     * Example:
@@ -72,7 +74,9 @@ produces a single resulting resource containing the merged result.
 > Do note that the data-type compatibility of `data` spec field should to be taken into account when merging results.
 
 > [!TIP]
-> The `XR` can be leveraged to define the merging options using the `spec.options` field. The currently supported options are:
+> The `XR` can be leveraged to define the merging `boolean` options.
+>
+> `spec.options`
 > | Option | Description |
 > | --- | --- |
 > | `override` | Merge override non-empty dst attributes with non-empty src attributes values. |
@@ -81,6 +85,12 @@ produces a single resulting resource containing the merged result.
 > | `sliceDeepCopy` | Merge slice element one by one with Overwrite flag. |
 > | `overwriteEmptyValue` | Merge override non-empty dst attributes with empty src attributes values. |
 > | `overrideEmptySlice` | Merge override empty dst slice with empty src slice. |
+>
+> `spec.transform`
+> | Option | Description |
+> | --- | --- |
+> | `stringToMap` | String values will be transformed to the `map[string]any` format when possible. Allowing for
+> deep-merging. |
 
 ## Example
 
@@ -111,7 +121,7 @@ produces a single resulting resource containing the merged result.
     key4: g
     key5: h
    ```
-  
+
 ---
 
 <details> 
@@ -175,6 +185,8 @@ spec:
     override: true
     appendSlice: true
     sliceDeepCopy: true
+  transform:
+    stringToMap: true
 ```
 
 </details>

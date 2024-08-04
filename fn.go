@@ -4,13 +4,6 @@ import (
 	"context"
 
 	"dario.cat/mergo"
-	"github.com/pcanilho/crossplane-function-xresources-merger/input/v1alpha1"
-	"github.com/pcanilho/crossplane-function-xresources-merger/internal/k8s"
-	"github.com/pcanilho/crossplane-function-xresources-merger/internal/maps"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	fnv1beta1 "github.com/crossplane/function-sdk-go/proto/v1beta1"
@@ -18,6 +11,14 @@ import (
 	"github.com/crossplane/function-sdk-go/resource"
 	"github.com/crossplane/function-sdk-go/resource/composed"
 	"github.com/crossplane/function-sdk-go/response"
+	"github.com/pcanilho/crossplane-function-xresources-merger/input/v1alpha1"
+	"github.com/pcanilho/crossplane-function-xresources-merger/internal/k8s"
+	"github.com/pcanilho/crossplane-function-xresources-merger/internal/maps"
+	"github.com/pcanilho/crossplane-function-xresources-merger/internal/merger"
+	"github.com/pcanilho/crossplane-function-xresources-merger/internal/transformer"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // Function returns whatever response you ask it to.
@@ -61,7 +62,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	}
 
 	f.log.Info("Running function...", "observed", xr.Resource.Object)
-	mergoOpts, err := parseMergoOpts(xr)
+	mergoOpts, err := merger.ParseMergoOpts(xr)
 	if err != nil {
 		f.log.Info("Failed to parse mergo options from XR", "error", err)
 		response.Fatal(rsp, errors.Wrap(err, "cannot parse mergo options from XR"))
@@ -95,9 +96,9 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 			return rsp, nil
 		}
 
-		data, ok := uRes["data"].(map[string]any)
-		if !ok {
-			response.Fatal(rsp, errors.New("resource data is not a map"))
+		data, err := transformer.Transform(xr, uRes["data"].(map[string]any))
+		if err != nil {
+			response.Fatal(rsp, errors.Wrap(err, "cannot transform resource data"))
 			return rsp, nil
 		}
 
@@ -142,40 +143,4 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	response.Normalf(rsp, "Successfully composed resource [resource=%s] [namespace=%s]", in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
 	f.log.Info("Successfully composed resource...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
 	return rsp, nil
-}
-
-func parseMergoOpts(xr *resource.Composite) (out map[string]func(*mergo.Config), err error) {
-	out = make(map[string]func(*mergo.Config))
-	if xr == nil {
-		return out, nil
-	}
-	optsMap := map[string]func(*mergo.Config){
-		"override":            mergo.WithOverride,
-		"appendSlice":         mergo.WithAppendSlice,
-		"sliceDeepCopy":       mergo.WithSliceDeepCopy,
-		"overwriteEmptyValue": mergo.WithOverwriteWithEmptyValue,
-		"overrideEmptySlice":  mergo.WithOverrideEmptySlice,
-		"typeCheck":           mergo.WithTypeCheck,
-	}
-
-	type xrSpec struct {
-		Spec struct {
-			Options map[string]bool
-		}
-	}
-
-	var xrConfig xrSpec
-	if err = runtime.DefaultUnstructuredConverter.FromUnstructured(xr.Resource.Object, &xrConfig); err != nil {
-		return nil, errors.Wrap(err, "cannot convert XR to struct")
-	}
-
-	for opt, enabled := range xrConfig.Spec.Options {
-		if !enabled {
-			continue
-		}
-		if o, ok := optsMap[opt]; ok {
-			out[opt] = o
-		}
-	}
-	return out, nil
 }
