@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/crossplane/function-sdk-go/resource"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/crossplane/function-sdk-go/resource"
 )
 
 type io = map[string]any
@@ -59,6 +60,7 @@ func transformToMap(a map[string]any) map[string]any {
 	return outData
 }
 
+// TransformFromMap asserts that all map values are strings
 func TransformFromMap(a map[string]any) map[string]any {
 	outData := make(map[string]any)
 	for k, v := range a {
