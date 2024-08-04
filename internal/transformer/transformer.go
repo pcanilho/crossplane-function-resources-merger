@@ -1,7 +1,6 @@
 package transformer
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/crossplane/function-sdk-go/resource"
@@ -44,12 +43,14 @@ func Transform(xr *resource.Composite, in IO) (IO, error) {
 func transformData(a map[string]any) map[string]any {
 	outData := make(map[string]any)
 	for k, v := range a {
-		dataConverted := make(map[string]any)
-		if err := yaml.NewDecoder(strings.NewReader(fmt.Sprint(v))).Decode(dataConverted); err != nil {
-			outData[k] = v
-		} else {
-			outData[k] = dataConverted
+		if vs, ok := v.(string); ok {
+			dataConverted := make(map[string]any)
+			if err := yaml.NewDecoder(strings.NewReader(vs)).Decode(dataConverted); err == nil {
+				outData[k] = dataConverted
+				continue
+			}
 		}
+		outData[k] = v
 	}
 	return outData
 }
