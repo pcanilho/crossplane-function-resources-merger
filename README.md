@@ -89,8 +89,7 @@ produces a single resulting resource containing the merged result.
 > ➤ **transform**
 > | Option | Description |
 > | --- | --- |
-> | `stringToMap` | String values will be transformed to the `map[string]any` format when possible. Allowing for
-> deep-merging. |
+> | `stringToMap` | String values will be transformed to the `map[string]any` format when possible. Allowing for deep-merging. |
 
 ## Example
 
