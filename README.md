@@ -76,8 +76,7 @@ produces a single resulting resource containing the merged result.
 > [!TIP]
 > The `XR` can be leveraged to define the merging `boolean` options.
 >
-> <br/>
-> `spec.options`
+> ➤ **spec.options**
 > | Option | Description |
 > | --- | --- |
 > | `override` | Merge override non-empty dst attributes with non-empty src attributes values. |
@@ -87,8 +86,7 @@ produces a single resulting resource containing the merged result.
 > | `overwriteEmptyValue` | Merge override non-empty dst attributes with empty src attributes values. |
 > | `overrideEmptySlice` | Merge override empty dst slice with empty src slice. |
 >
-> <br/>
-> `spec.transform`
+> ➤ **spec.transform**
 > | Option | Description |
 > | --- | --- |
 > | `stringToMap` | String values will be transformed to the `map[string]any` format when possible. Allowing for
