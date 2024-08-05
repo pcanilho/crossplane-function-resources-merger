@@ -19,6 +19,35 @@ produces a single resulting resource containing the merged result.
 
 ## How-to-use
 
+### Function `Input` specification
+
+`targetRef` (required)
+
+This field specifies the target resource that will be created/managed by this function.
+
+| Field        | Description                                                                                 |
+|--------------|---------------------------------------------------------------------------------------------|
+| `namespace`  | The namespace where the target resource will be created/managed.                            |
+| `name`       | The name of the target composition resource name `crossplane.io/composition-resource-name`. |
+| `apiVersion` | The API version of the target resource.                                                     |
+| `kind`       | The kind of the target resource.                                                            |
+
+`resourceRefs` (required)
+A list of resources that will be used to merge into the target resource.
+
+| Field            | Description                                               |
+|------------------|-----------------------------------------------------------|
+| `namespace`      | The namespace where the resource is located.              |
+| `name`           | The name of the resource.                                 |
+| `apiVersion`     | The API version of the resource.                          |
+| `kind`           | The kind of the resource.                                 |
+| `extractFromKey` | (Optional) The key to extract the data from the resource. |
+
+> ![TIP]
+> Both `targetRef` and `resourceRefs` have full support for both standard kubernetes resources and custom-resources.
+
+### Specification
+
 1. Select which is the target resource that will be created/managed by this function.
     * Examples: `ConfigMap`, `EnvironmentConfig`, etc.
     * Using a `ConfigMap`:
@@ -142,7 +171,7 @@ spec:
       functionRef:
         name: function-xresources-merger
       input:
-        apiVersion: template.fn.crossplane.io/v1beta1
+        apiVersion: resources-merged.fn.canilho.net/v1alpha1
         kind: Input
         targetRef:
           namespace: ephemeral

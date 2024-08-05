@@ -15,8 +15,9 @@ import (
 
 // ResourceRef is a reference to a Kubernetes resource.
 type ResourceRef struct {
-	Ref       v1.TypedReference `json:",inline"`
-	Namespace string            `json:"namespace,omitempty"`
+	Ref            v1.TypedReference `json:",inline"`
+	Namespace      string            `json:"namespace,omitempty"`
+	ExtractFromKey string            `json:"extractFromKey,omitempty"`
 }
 
 // Input can be used to provide input to this Function.

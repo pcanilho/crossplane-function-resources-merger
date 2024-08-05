@@ -13,6 +13,10 @@ import (
 
 type io = map[string]any
 
+var transformerMap = map[string]func(io) io{
+	"stringToMap": TransformToMap,
+}
+
 // Transform parses a given XR composite and applies any found settings by running the appropriate transformer.
 func Transform(xr *resource.Composite, in io) (io, error) {
 	type xrSpec struct {
@@ -22,12 +26,8 @@ func Transform(xr *resource.Composite, in io) (io, error) {
 	}
 
 	out := in
-	transformerMap := map[string]func(io) io{
-		"stringToMap": transformToMap,
-	}
-
 	var xrConfig xrSpec
-	//nolint: nilerr // Silently ignore not set transform settings
+	//nolint: nilerr // Silently ignore when transform settings are not set
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(xr.Resource.Object, &xrConfig); err != nil {
 		return in, nil
 	}
@@ -44,8 +44,8 @@ func Transform(xr *resource.Composite, in io) (io, error) {
 	return out, nil
 }
 
-// transformToMap transforms a map of strings to a map of any.
-func transformToMap(a map[string]any) map[string]any {
+// TransformToMap transforms all map values to other maps when possible.
+func TransformToMap(a map[string]any) map[string]any {
 	outData := make(map[string]any)
 	for k, v := range a {
 		if vs, ok := v.(string); ok {
@@ -60,7 +60,7 @@ func transformToMap(a map[string]any) map[string]any {
 	return outData
 }
 
-// TransformFromMap asserts that all map values are strings
+// TransformFromMap transforms all map values to string.
 func TransformFromMap(a map[string]any) map[string]any {
 	outData := make(map[string]any)
 	for k, v := range a {
@@ -74,4 +74,21 @@ func TransformFromMap(a map[string]any) map[string]any {
 		outData[k] = fmt.Sprint(v)
 	}
 	return outData
+}
+
+// ExtractMapValue extracts a map value where its key matches the provided argument.
+func ExtractMapValue(m map[string]any, key string) (map[string]any, error) {
+	for k, v := range m {
+		vm, ok := v.(map[string]any)
+		if k == key {
+			if ok {
+				return vm, nil
+			}
+			return map[string]any{k: v}, nil
+		}
+		if ok {
+			return ExtractMapValue(vm, key)
+		}
+	}
+	return nil, fmt.Errorf("unable to find value for key [%s]", key)
 }

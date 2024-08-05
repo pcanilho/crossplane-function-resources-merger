@@ -40,9 +40,12 @@ spec:
             type: object
           resourceRefs:
             items:
+              description: ResourceRef is a reference to a Kubernetes resource.
               properties:
                 apiVersion:
                   description: APIVersion of the referenced object.
+                  type: string
+                extractFromKey:
                   type: string
                 kind:
                   description: Kind of the referenced object.
@@ -62,9 +65,12 @@ spec:
               type: object
             type: array
           targetRef:
+            description: ResourceRef is a reference to a Kubernetes resource.
             properties:
               apiVersion:
                 description: APIVersion of the referenced object.
+                type: string
+              extractFromKey:
                 type: string
               kind:
                 description: Kind of the referenced object.

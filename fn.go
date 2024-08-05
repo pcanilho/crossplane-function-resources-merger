@@ -97,10 +97,23 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 			return rsp, nil
 		}
 
+		// transform
 		data, err := transformer.Transform(xr, uRes["data"].(map[string]any))
 		if err != nil {
 			response.Fatal(rsp, errors.Wrap(err, "cannot transform resource data"))
 			return rsp, nil
+		}
+
+		// extract
+		if ref.ExtractFromKey != "" {
+			extracted, err := transformer.ExtractMapValue(data, ref.ExtractFromKey)
+			// if extraction is selected but fails, the merge function fails
+			if err != nil {
+				f.log.Info("Failed to extract data from resource", "error", err)
+				response.Fatal(rsp, errors.Wrapf(err, "cannot extract data from resource with key [%s]", ref.ExtractFromKey))
+				return rsp, nil
+			}
+			data = extracted
 		}
 
 		if mergedResource == nil {
