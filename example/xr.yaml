@@ -1,6 +1,6 @@
 ---
-apiVersion: resource-merger.fn.canilho.net/v1alpha1
-kind: XR
+apiVersion: resources-merger.fn.canilho.net/v1alpha1
+kind: xMerger
 metadata:
   name: merger-results-xr
 spec:

@@ -1,6 +1,6 @@
 // Package v1alpha1 contains the input type for this Function
 // +kubebuilder:object:generate=true
-// +groupName=resources-merged.fn.canilho.net
+// +groupName=resources-merger.fn.canilho.net
 // +versionName=v1alpha1
 package v1alpha1
 

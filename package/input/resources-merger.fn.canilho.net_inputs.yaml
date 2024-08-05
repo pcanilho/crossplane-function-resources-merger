@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: inputs.resources-merged.fn.canilho.net
+  name: inputs.resources-merger.fn.canilho.net
 spec:
-  group: resources-merged.fn.canilho.net
+  group: resources-merger.fn.canilho.net
   names:
     categories:
     - crossplane

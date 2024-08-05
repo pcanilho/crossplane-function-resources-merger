@@ -36,7 +36,7 @@ func TestRunFunction(t *testing.T) {
 				req: &fnv1beta1.RunFunctionRequest{
 					Meta: &fnv1beta1.RequestMeta{Tag: "test"},
 					Input: resource.MustStructJSON(`{
-						"apiVersion": "resources-merged.fn.canilho.net/v1alpha1",
+						"apiVersion": "resources-merger.fn.canilho.net/v1alpha1",
 						"kind": "Input",
 						"targetRef": {
 							"apiVersion": "v1",
@@ -64,7 +64,7 @@ func TestRunFunction(t *testing.T) {
 				req: &fnv1beta1.RunFunctionRequest{
 					Meta: &fnv1beta1.RequestMeta{Tag: "test"},
 					Input: resource.MustStructJSON(`{
-						"apiVersion": "resources-merged.fn.canilho.net/v1alpha1",
+						"apiVersion": "resources-merger.fn.canilho.net/v1alpha1",
 						"kind": "Input"
 					}`),
 				},
@@ -87,7 +87,7 @@ func TestRunFunction(t *testing.T) {
 				req: &fnv1beta1.RunFunctionRequest{
 					Meta: &fnv1beta1.RequestMeta{Tag: "test"},
 					Input: resource.MustStructJSON(`{
-						"apiVersion": "resources-merged.fn.canilho.net/v1alpha1",
+						"apiVersion": "resources-merger.fn.canilho.net/v1alpha1",
 						"kind": "Input",
 						"targetRef": {
 							"namespace": "map-merged"
@@ -113,7 +113,7 @@ func TestRunFunction(t *testing.T) {
 				req: &fnv1beta1.RunFunctionRequest{
 					Meta: &fnv1beta1.RequestMeta{Tag: "test"},
 					Input: resource.MustStructJSON(`{
-						"apiVersion": "resources-merged.fn.canilho.net/v1alpha1",
+						"apiVersion": "resources-merger.fn.canilho.net/v1alpha1",
 						"kind": "Input",
 						"targetRef": {
 							"apiVersion": "v1",
@@ -156,7 +156,7 @@ func TestRunFunction(t *testing.T) {
 					Observed: &fnv1beta1.State{
 						Composite: &fnv1beta1.Resource{
 							Resource: resource.MustStructJSON(`{
-								"apiVersion": "resources-merged.fn.canilho.net/v1alpha1",
+								"apiVersion": "resources-merger.fn.canilho.net/v1alpha1",
 								"kind": "XR",
 								"metadata": {
 									"name": "merger-results-xr"
@@ -173,7 +173,7 @@ func TestRunFunction(t *testing.T) {
 					},
 					Meta: &fnv1beta1.RequestMeta{Tag: "test"},
 					Input: resource.MustStructJSON(`{
-						"apiVersion": "resources-merged.fn.canilho.net/v1alpha1",
+						"apiVersion": "resources-merger.fn.canilho.net/v1alpha1",
 						"kind": "Input",
 						"targetRef": {
 							"apiVersion": "v1",

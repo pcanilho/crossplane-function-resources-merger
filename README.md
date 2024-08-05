@@ -17,6 +17,38 @@
 This is a crossplane function that merges any Kubernetes resources which contain a root `data` field in their spec and
 produces a single resulting resource containing the merged result.
 
+## Installing this function
+
+> [!IMPORTANT]
+> This function does not require cluster-wide privileges but does require create permissions on the target namespace.
+
+* Install using `kubectl`:
+
+```shell
+cat <<EOF | kubectl apply -f -
+---
+apiVersion: pkg.crossplane.io/v1beta1
+kind: Function
+metadata:
+  name: function-xresources-merger
+spec:
+  package: ghcr.io/pcanilho/crossplane-function-resources-merger:v0.1.3
+EOF
+```
+
+* If different permissions are to be granted to the function, a `Role` and `RoleBinding` should be created and
+attached to the `ServiceAccount` managed by a `DeploymentRuntimeConfig`. Once you're ready, add the below block to the above document:
+
+```yaml
+...
+spec:
+  ...
+  runtimeConfigRef:
+    apiVersion: pkg.crossplane.io/v1beta1
+    kind: RuntimeConfig
+    name: <your-DeploymentRuntimeConfig>
+```
+
 ## How-to-use
 
 ### Function `Input` specification
@@ -172,7 +204,7 @@ spec:
       functionRef:
         name: function-xresources-merger
       input:
-        apiVersion: resources-merged.fn.canilho.net/v1alpha1
+        apiVersion: resources-merger.fn.canilho.net/v1alpha1
         kind: Input
         targetRef:
           namespace: ephemeral

@@ -4,15 +4,15 @@ metadata:
   name: function-xresources-merger
 spec:
   compositeTypeRef:
-    apiVersion: resource-merger.canilho.net/v1alpha1
-    kind: XR
+    apiVersion: resources-merger.fn.canilho.net/v1alpha1
+    kind: xMerger
   mode: Pipeline
   pipeline:
   - step: run
     functionRef:
       name: function-xresources-merger
     input:
-      apiVersion: resources-merged.fn.canilho.net/v1alpha1
+      apiVersion: resources-merger.fn.canilho.net/v1alpha1
       kind: Input
       targetRef:
         namespace: ephemeral
