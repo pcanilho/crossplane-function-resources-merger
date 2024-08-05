@@ -23,7 +23,7 @@ produces a single resulting resource containing the merged result.
 
 `targetRef` (required)
 
-This field specifies the target resource that will be created/managed by this function.
+Specifies the target resource that will be created/managed by this function.
 
 | Field        | Description                                                                                 |
 |--------------|---------------------------------------------------------------------------------------------|
@@ -33,6 +33,7 @@ This field specifies the target resource that will be created/managed by this fu
 | `kind`       | The kind of the target resource.                                                            |
 
 `resourceRefs` (required)
+
 A list of resources that will be used to merge into the target resource.
 
 | Field            | Description                                               |
