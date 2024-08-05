@@ -43,7 +43,7 @@ A list of resources that will be used to merge into the target resource.
 | `kind`           | The kind of the resource.                                 |
 | `extractFromKey` | (Optional) The key to extract the data from the resource. |
 
-> ![TIP]
+> [!TIP]
 > Both `targetRef` and `resourceRefs` have full support for both standard kubernetes resources and custom-resources.
 
 ### Specification
