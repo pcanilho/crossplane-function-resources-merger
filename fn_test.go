@@ -120,7 +120,7 @@ func TestRunFunction(t *testing.T) {
 							"kind": "ConfigMap",
 							"namespace": "ephemeral"
 						},
-						"resourceRefs": [
+						"sourceRefs": [
 							{
 								"apiVersion": "v1",
 								"kind": "ConfigMap",
@@ -181,7 +181,7 @@ func TestRunFunction(t *testing.T) {
 							"name": "map-merged",
 							"namespace": "ephemeral"
 						},
-						"resourceRefs": [
+						"sourceRefs": [
 							{
 								"apiVersion": "v1",
 								"kind": "ConfigMap",

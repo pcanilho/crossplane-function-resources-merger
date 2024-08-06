@@ -67,7 +67,7 @@ Specifies the target resource that will be created/managed by this function.
 | `apiVersion` | The API version of the target resource.                                                     |
 | `kind`       | The kind of the target resource.                                                            |
 
-`resourceRefs` (required)
+`sourceRefs` (required)
 
 A list of resources that will be used to merge into the target resource.
 
@@ -80,7 +80,7 @@ A list of resources that will be used to merge into the target resource.
 | `extractFromKey` | (Optional) The key to extract the data from the resource. |
 
 > [!TIP]
-> Both `targetRef` and `resourceRefs` have full support for both standard kubernetes resources and custom-resources.
+> Both `targetRef` and `sourceRefs` have full support for both standard kubernetes resources and custom-resources.
 
 ### Specification
 
@@ -214,7 +214,7 @@ spec:
           name: merged
           apiVersion: v1
           kind: ConfigMap
-        resourceRefs:
+        sourceRefs:
           - namespace: ephemeral
             name: map-1
             apiVersion: v1

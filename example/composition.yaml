@@ -20,7 +20,7 @@ spec:
         name: merged
         apiVersion: v1
         kind: ConfigMap
-      resourceRefs:
+      sourceRefs:
         - namespace: ephemeral
           name: map-1
           apiVersion: v1

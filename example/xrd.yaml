@@ -7,6 +7,9 @@ spec:
   names:
     kind: xMerger
     plural: xmergers
+  claimNames:
+    kind: Merger
+    plural: mergers
   versions:
     - name: v1alpha1
       served: true

@@ -40,9 +40,9 @@ spec:
             type: string
           metadata:
             type: object
-          resourceRefs:
+          sourceRefs:
             items:
-              description: ResourceRef is a reference to a Kubernetes resource.
+              description: SourceRef is a reference to a Kubernetes resource.
               properties:
                 apiVersion:
                   description: APIVersion of the referenced object.
@@ -67,7 +67,7 @@ spec:
               type: object
             type: array
           targetRef:
-            description: ResourceRef is a reference to a Kubernetes resource.
+            description: SourceRef is a reference to a Kubernetes resource.
             properties:
               apiVersion:
                 description: APIVersion of the referenced object.
@@ -91,7 +91,7 @@ spec:
             - name
             type: object
         required:
-        - resourceRefs
+        - sourceRefs
         - targetRef
         type: object
     served: true
