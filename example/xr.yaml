@@ -10,4 +10,4 @@ spec:
     sliceDeepCopy: true
   transform:
     stringToMap: true
-  mode: managed
+  mode: unmanaged

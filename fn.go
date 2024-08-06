@@ -159,7 +159,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	runtimeObject.SetGroupVersionKind(gvk)
 
 	if mode, err := xr.Resource.GetString("spec.mode"); err != nil || mode == "managed" {
-		runtimeObject.Object["ownerReferences"] = []map[string]any{
+		runtimeObject.Object["metadata"].(map[string]any)["ownerReferences"] = []map[string]any{
 			{
 				"apiVersion":         xr.Resource.GetAPIVersion(),
 				"blockOwnerDeletion": true,
