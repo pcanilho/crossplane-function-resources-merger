@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"dario.cat/mergo"
 	"github.com/pcanilho/crossplane-function-xresources-merger/input/v1alpha1"
@@ -9,6 +10,8 @@ import (
 	"github.com/pcanilho/crossplane-function-xresources-merger/internal/maps"
 	"github.com/pcanilho/crossplane-function-xresources-merger/internal/merger"
 	"github.com/pcanilho/crossplane-function-xresources-merger/internal/transformer"
+	coreV1 "k8s.io/api/core/v1"
+	"k8s.io/api/resource/v1alpha2"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -171,7 +174,10 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 		return rsp, nil
 	}
 
-	rName := "xmerger-" + target.Ref.Name
+	_ = coreV1.AddToScheme(composed.Scheme)
+	_ = v1alpha2.AddToScheme(composed.Scheme)
+
+	rName := fmt.Sprintf("xmerger-%s", target.Ref.Name)
 	desired[resource.Name(rName)] = &resource.DesiredComposed{Resource: dc}
 	if err = response.SetDesiredComposedResources(rsp, desired); err != nil {
 		response.Fatal(rsp, errors.Wrapf(err, "cannot set desired composed resources in %T", rsp))
