@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/crossplane/function-sdk-go/resource"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/crossplane/function-sdk-go/resource"
 )
 
 type io = map[string]any
