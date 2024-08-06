@@ -146,7 +146,16 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 		mergedResource = transformer.TransformFromMap(mergedResource)
 	}
 
-	runtimeObject := &unstructured.Unstructured{Object: map[string]any{"data": mergedResource}}
+	runtimeObject := &unstructured.Unstructured{
+		Object: map[string]any{
+			"metadata": map[string]any{
+				"annotations": map[string]any{
+					"crossplane.io/external-name": target.Ref.Name,
+				},
+			},
+			"data": mergedResource,
+		},
+	}
 	runtimeObject.SetGroupVersionKind(gvk)
 
 	desired, err := request.GetDesiredComposedResources(req)
@@ -162,13 +171,14 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 		return rsp, nil
 	}
 
-	desired[resource.Name(in.TargetRef.Ref.Name)] = &resource.DesiredComposed{Resource: dc}
+	rName := "xmerger-" + target.Ref.Name
+	desired[resource.Name(rName)] = &resource.DesiredComposed{Resource: dc}
 	if err = response.SetDesiredComposedResources(rsp, desired); err != nil {
 		response.Fatal(rsp, errors.Wrapf(err, "cannot set desired composed resources in %T", rsp))
 		return rsp, nil
 	}
-	response.Normalf(rsp, "Successfully composed resource [resource=%s] [namespace=%s]", in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
-	f.log.Info("Successfully composed resource...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
+	response.Normalf(rsp, "Successfully composed resource [external-name:%s] [resource=%s] [namespace=%s]", target.Ref.Name, in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
+	f.log.Info("Successfully composed resources...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
 	f.log.Debug("Generation results", "resource", runtimeObject.Object)
 	return rsp, nil
 }
