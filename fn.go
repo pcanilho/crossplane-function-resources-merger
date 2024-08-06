@@ -177,7 +177,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 		response.Fatal(rsp, errors.Wrapf(err, "failed to create resource %s/%s", in.TargetRef.Namespace, in.TargetRef.Ref.Name))
 		return rsp, nil
 	}
-	response.Normalf(rsp, "Function ran successfully with input %v", in)
+	response.Normalf(rsp, "Successfully composed resource [name=%s] [resource=%s] [namespace=%s]", in.TargetRef.Ref.Name, in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
 	f.log.Info("Successfully composed resources...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
 	f.log.Debug("Generation results", "resource", runtimeObject.Object)
 	return rsp, nil
@@ -192,19 +192,19 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	//
 	// composed.Scheme.AddKnownTypeWithName(gvk, runtimeObject)
 	// dc, err := composed.From(runtimeObject)
-	//if err != nil {
+	// if err != nil {
 	//	response.Fatal(rsp, errors.Wrapf(err, "Unable to compose resource"))
 	//	return rsp, nil
 	//}
 	//
-	//rName := fmt.Sprintf("xmerger-%s", target.Ref.Name)
-	//desired[resource.Name(rName)] = &resource.DesiredComposed{Resource: dc}
-	//if err = response.SetDesiredComposedResources(rsp, desired); err != nil {
+	// rName := fmt.Sprintf("xmerger-%s", target.Ref.Name)
+	// desired[resource.Name(rName)] = &resource.DesiredComposed{Resource: dc}
+	// if err = response.SetDesiredComposedResources(rsp, desired); err != nil {
 	//	response.Fatal(rsp, errors.Wrapf(err, "cannot set desired composed resources in %T", rsp))
 	//	return rsp, nil
 	//}
-	//response.Normalf(rsp, "Successfully composed resource [external-name=%s] [resource=%s] [namespace=%s]", target.Ref.Name, in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
-	//f.log.Info("Successfully composed resources...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
-	//f.log.Debug("Generation results", "resource", runtimeObject.Object)
-	//return rsp, nil
+	// response.Normalf(rsp, "Successfully composed resource [external-name=%s] [resource=%s] [namespace=%s]", target.Ref.Name, in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
+	// f.log.Info("Successfully composed resources...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
+	// f.log.Debug("Generation results", "resource", runtimeObject.Object)
+	// return rsp, nil
 }

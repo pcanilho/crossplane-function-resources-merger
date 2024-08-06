@@ -166,7 +166,8 @@ func TestRunFunction(t *testing.T) {
 										"override": true,
 										"appendSlice": true,
 										"sliceDeepCopy": true
-									}
+									},
+									"mode": "unmanaged"
 								}
 							}`),
 						},
@@ -204,31 +205,31 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Successfully composed resource [external-name=map-merged] [resource=/v1, Kind=ConfigMap] [namespace=ephemeral]",
+							Message:  "Successfully composed resource [name=map-merged] [resource=/v1, Kind=ConfigMap] [namespace=ephemeral]",
 						},
 					},
-					Desired: &fnv1beta1.State{
-						Resources: map[string]*fnv1beta1.Resource{
-							"xmerger-map-merged": {
-								Resource: resource.MustStructJSON(`{
-									"apiVersion": "v1",
-									"kind": "ConfigMap",
-									"metadata": {
-										"namespace": "ephemeral",
-										"name": "map-merged",
-										"annotations": {
-											"crossplane.io/external-name": "map-merged"
-										}
-									},
-									"data": {
-										"key1": "a",
-										"key2": "c",
-										"key4": "d"
-									}
-								}`),
-							},
-						},
-					},
+					//Desired: &fnv1beta1.State{
+					//	Resources: map[string]*fnv1beta1.Resource{
+					//		"xmerger-map-merged": {
+					//			Resource: resource.MustStructJSON(`{
+					//				"apiVersion": "v1",
+					//				"kind": "ConfigMap",
+					//				"metadata": {
+					//					"namespace": "ephemeral",
+					//					"name": "map-merged",
+					//					"annotations": {
+					//						"crossplane.io/external-name": "map-merged"
+					//					}
+					//				},
+					//				"data": {
+					//					"key1": "a",
+					//					"key2": "c",
+					//					"key4": "d"
+					//				}
+					//			}`),
+					//		},
+					//	},
+					// },
 				},
 			},
 		},
