@@ -25,7 +25,7 @@ spec:
           name: map-1
           apiVersion: v1
           kind: ConfigMap
-          extractFromKey: nested
+#          extractFromKey: nested
         - namespace: ephemeral
           name: map-2
           apiVersion: v1

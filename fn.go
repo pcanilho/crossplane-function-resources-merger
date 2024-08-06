@@ -10,8 +10,8 @@ import (
 	"github.com/pcanilho/crossplane-function-xresources-merger/internal/maps"
 	"github.com/pcanilho/crossplane-function-xresources-merger/internal/merger"
 	"github.com/pcanilho/crossplane-function-xresources-merger/internal/transformer"
+	coreV1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -144,20 +144,29 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 
 	// Conform with the v1.ConfigMap if selected
 	if gvk.String() == "/v1, Kind=ConfigMap" {
-		mergedResource = transformer.TransformFromMap(mergedResource)
+		_ = transformer.TransformFromMap(mergedResource)
 	}
 
-	runtimeObject := &unstructured.Unstructured{
-		Object: map[string]any{
-			"metadata": map[string]any{
-				"annotations": map[string]any{
-					"crossplane.io/external-name": target.Ref.Name,
-				},
+	runtimeObject := &coreV1.ConfigMap{
+		ObjectMeta: v1.ObjectMeta{
+			Namespace: target.Namespace,
+			Annotations: map[string]string{
+				"crossplane.io/external-name": target.Ref.Name,
 			},
-			"data": mergedResource,
 		},
+		//Data: mergedResource,
 	}
-	runtimeObject.SetGroupVersionKind(gvk)
+	// runtimeObject := &unstructured.Unstructured{
+	//	Object: map[string]any{
+	//		"metadata": map[string]any{
+	//			"annotations": map[string]any{
+	//				"crossplane.io/external-name": target.Ref.Name,
+	//			},
+	//		},
+	//		"data": mergedResource,
+	//	},
+	//}
+	// runtimeObject.SetGroupVersionKind(gvk)
 
 	desired, err := request.GetDesiredComposedResources(req)
 	if err != nil {
@@ -165,7 +174,6 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 		return rsp, nil
 	}
 
-	composed.Scheme.AddKnownTypes(gvk.GroupVersion(), runtimeObject)
 	composed.Scheme.AddKnownTypeWithName(gvk, runtimeObject)
 	dc, err := composed.From(runtimeObject)
 	if err != nil {
@@ -181,6 +189,6 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	}
 	response.Normalf(rsp, "Successfully composed resource [external-name=%s] [resource=%s] [namespace=%s]", target.Ref.Name, in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
 	f.log.Info("Successfully composed resources...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
-	f.log.Debug("Generation results", "resource", runtimeObject.Object)
+	f.log.Debug("Generation results", "resource", fmt.Sprintf("%+v", runtimeObject))
 	return rsp, nil
 }
