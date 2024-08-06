@@ -32,7 +32,7 @@ kind: Function
 metadata:
   name: function-xresources-merger
 spec:
-  package: ghcr.io/pcanilho/crossplane-function-resources-merger:v0.1.3
+  package: ghcr.io/pcanilho/crossplane-function-resources-merger:v0.1.5
 EOF
 ```
 
@@ -52,6 +52,9 @@ spec:
 ## How-to-use
 
 ### Function `Input` specification
+
+`debug` (optional)
+If set to `true`, the function will output debug information.
 
 `targetRef` (required)
 
