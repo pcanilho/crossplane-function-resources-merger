@@ -150,6 +150,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	runtimeObject := &unstructured.Unstructured{
 		Object: map[string]any{
 			"metadata": map[string]any{
+				"name":      target.Ref.Name,
 				"namespace": in.TargetRef.Namespace,
 				"annotations": map[string]any{
 					"crossplane.io/external-name": target.Ref.Name,
