@@ -5,17 +5,6 @@ import (
 	"fmt"
 
 	"dario.cat/mergo"
-	"github.com/pcanilho/crossplane-function-xresources-merger/input/v1alpha1"
-	"github.com/pcanilho/crossplane-function-xresources-merger/internal/k8s"
-	"github.com/pcanilho/crossplane-function-xresources-merger/internal/maps"
-	"github.com/pcanilho/crossplane-function-xresources-merger/internal/merger"
-	"github.com/pcanilho/crossplane-function-xresources-merger/internal/transformer"
-	coreV1 "k8s.io/api/core/v1"
-	"k8s.io/api/resource/v1alpha2"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/function-sdk-go"
@@ -24,6 +13,15 @@ import (
 	"github.com/crossplane/function-sdk-go/resource"
 	"github.com/crossplane/function-sdk-go/resource/composed"
 	"github.com/crossplane/function-sdk-go/response"
+	"github.com/pcanilho/crossplane-function-xresources-merger/input/v1alpha1"
+	"github.com/pcanilho/crossplane-function-xresources-merger/internal/k8s"
+	"github.com/pcanilho/crossplane-function-xresources-merger/internal/maps"
+	"github.com/pcanilho/crossplane-function-xresources-merger/internal/merger"
+	"github.com/pcanilho/crossplane-function-xresources-merger/internal/transformer"
+	"k8s.io/api/resource/v1alpha2"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // Function returns whatever response you ask it to.
@@ -174,7 +172,6 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 		return rsp, nil
 	}
 
-	_ = coreV1.AddToScheme(composed.Scheme)
 	_ = v1alpha2.AddToScheme(composed.Scheme)
 
 	rName := fmt.Sprintf("xmerger-%s", target.Ref.Name)
