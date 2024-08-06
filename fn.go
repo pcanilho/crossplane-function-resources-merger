@@ -161,6 +161,19 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	}
 	runtimeObject.SetGroupVersionKind(gvk)
 
+	// mode: detached (unmanaged resource)
+	if mode, err := xr.Resource.GetString("spec.mode"); err == nil && mode == "detached" {
+		_, err = k8cCtl.CreateResource(ctx, in.TargetRef.Namespace, runtimeObject, v1.CreateOptions{})
+		if err != nil {
+			response.Fatal(rsp, errors.Wrapf(err, "failed to create resource %s/%s", in.TargetRef.Namespace, in.TargetRef.Ref.Name))
+			return rsp, nil
+		}
+		response.Normalf(rsp, "Function ran successfully with input %v", in)
+		f.log.Info("Successfully composed resources...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
+		f.log.Debug("Generation results", "resource", runtimeObject.Object)
+		return rsp, nil
+	}
+
 	desired, err := request.GetDesiredComposedResources(req)
 	if err != nil {
 		response.Fatal(rsp, errors.Wrapf(err, "cannot get desired resources from %T", req))

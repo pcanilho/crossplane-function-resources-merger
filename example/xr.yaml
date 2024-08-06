@@ -10,3 +10,4 @@ spec:
     sliceDeepCopy: true
   transform:
     stringToMap: true
+  mode: detached

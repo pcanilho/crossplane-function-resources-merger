@@ -4,6 +4,7 @@ package k8s
 import (
 	"context"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -85,6 +86,25 @@ func (c *Controller) GetResource(ctx context.Context, namespace, name string, re
 		res, err = client.Get(ctx, name, opts)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get resource")
+		}
+	}
+	return res, nil
+}
+
+// CreateResource creates a resource in the Kubernetes cluster.
+func (c *Controller) CreateResource(ctx context.Context, namespace string, resource *unstructured.Unstructured, opts metav1.CreateOptions) (*unstructured.Unstructured, error) {
+	gvk := resource.GroupVersionKind()
+	client := c.client.Resource(schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: strings.ToLower(gvk.Kind) + "s",
+	})
+	namespacedClient := client.Namespace(namespace)
+	res, err := namespacedClient.Create(ctx, resource, opts)
+	if err != nil {
+		res, err = client.Create(ctx, resource, opts)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create resource")
 		}
 	}
 	return res, nil
