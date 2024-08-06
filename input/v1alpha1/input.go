@@ -5,8 +5,9 @@
 package v1alpha1
 
 import (
-	v1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	v1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 )
 
 // This isn't a custom resource, in the sense that we never install its CRD.
