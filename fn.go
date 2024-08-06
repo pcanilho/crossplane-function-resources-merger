@@ -169,5 +169,6 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	}
 	response.Normalf(rsp, "Successfully composed resource [resource=%s] [namespace=%s]", in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
 	f.log.Info("Successfully composed resource...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
+	f.log.Debug("Generation results", "resource", runtimeObject.Object)
 	return rsp, nil
 }
