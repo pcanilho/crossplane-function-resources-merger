@@ -214,6 +214,7 @@ func TestRunFunction(t *testing.T) {
 									"apiVersion": "v1",
 									"kind": "ConfigMap",
 									"metadata": {
+										"namespace": "ephemeral",
 										"annotations": {
 											"crossplane.io/external-name": "map-merged"
 										}

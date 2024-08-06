@@ -61,8 +61,8 @@ func TransformToMap(a map[string]any) map[string]any {
 }
 
 // TransformFromMap transforms all map values to string.
-func TransformFromMap(a map[string]any) map[string]any {
-	outData := make(map[string]any)
+func TransformFromMap(a map[string]any) map[string]string {
+	outData := make(map[string]string)
 	for k, v := range a {
 		if vm, ok := v.(map[string]any); ok {
 			var buf strings.Builder

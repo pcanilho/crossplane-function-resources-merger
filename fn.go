@@ -143,9 +143,10 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	gvk := target.Ref.GroupVersionKind()
 
 	// Conform with the v1.ConfigMap if selected
-	if gvk.String() == "/v1, Kind=ConfigMap" {
-		_ = transformer.TransformFromMap(mergedResource)
-	}
+
+	// if gvk.String() == "/v1, Kind=ConfigMap" {
+	//mergedData = transformer.TransformFromMap(mergedResource)
+	//}
 
 	runtimeObject := &coreV1.ConfigMap{
 		ObjectMeta: v1.ObjectMeta{
@@ -154,7 +155,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 				"crossplane.io/external-name": target.Ref.Name,
 			},
 		},
-		//Data: mergedResource,
+		Data: transformer.TransformFromMap(mergedResource),
 	}
 	// runtimeObject := &unstructured.Unstructured{
 	//	Object: map[string]any{
