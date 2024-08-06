@@ -145,7 +145,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	// Conform with the v1.ConfigMap if selected
 
 	// if gvk.String() == "/v1, Kind=ConfigMap" {
-	//mergedData = transformer.TransformFromMap(mergedResource)
+	// mergedData = transformer.TransformFromMap(mergedResource)
 	//}
 
 	runtimeObject := &coreV1.ConfigMap{
