@@ -10,7 +10,6 @@ import (
 	"github.com/pcanilho/crossplane-function-xresources-merger/internal/maps"
 	"github.com/pcanilho/crossplane-function-xresources-merger/internal/merger"
 	"github.com/pcanilho/crossplane-function-xresources-merger/internal/transformer"
-	"k8s.io/api/resource/v1alpha2"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -166,14 +165,13 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 		return rsp, nil
 	}
 
+	composed.Scheme.AddKnownTypes(gvk.GroupVersion(), runtimeObject)
 	composed.Scheme.AddKnownTypeWithName(gvk, runtimeObject)
 	dc, err := composed.From(runtimeObject)
 	if err != nil {
 		response.Fatal(rsp, errors.Wrapf(err, "Unable to compose resource"))
 		return rsp, nil
 	}
-
-	_ = v1alpha2.AddToScheme(composed.Scheme)
 
 	rName := fmt.Sprintf("xmerger-%s", target.Ref.Name)
 	desired[resource.Name(rName)] = &resource.DesiredComposed{Resource: dc}
