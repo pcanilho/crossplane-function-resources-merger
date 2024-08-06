@@ -99,12 +99,36 @@ func (c *Controller) CreateResource(ctx context.Context, namespace string, resou
 		Version:  gvk.Version,
 		Resource: strings.ToLower(gvk.Kind) + "s",
 	})
+
+	if _, err := c.GetResource(ctx, namespace, resource.GetName(), gvk, metav1.GetOptions{}); err == nil {
+		return c.UpdateResource(ctx, namespace, resource, metav1.UpdateOptions{})
+	}
+
 	namespacedClient := client.Namespace(namespace)
 	res, err := namespacedClient.Create(ctx, resource, opts)
 	if err != nil {
 		res, err = client.Create(ctx, resource, opts)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create resource")
+		}
+	}
+	return res, nil
+}
+
+// UpdateResource updates a resource in the Kubernetes cluster.
+func (c *Controller) UpdateResource(ctx context.Context, namespace string, resource *unstructured.Unstructured, opts metav1.UpdateOptions) (*unstructured.Unstructured, error) {
+	gvk := resource.GroupVersionKind()
+	client := c.client.Resource(schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: strings.ToLower(gvk.Kind) + "s",
+	})
+	namespacedClient := client.Namespace(namespace)
+	res, err := namespacedClient.Update(ctx, resource, opts)
+	if err != nil {
+		res, err = client.Update(ctx, resource, opts)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to update resource")
 		}
 	}
 	return res, nil

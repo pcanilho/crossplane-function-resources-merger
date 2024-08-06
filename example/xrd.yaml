@@ -35,3 +35,8 @@ spec:
                   properties:
                     stringToMap:
                       type: boolean
+                mode:
+                  type: string
+                  enum:
+                    - unmanaged
+                    - managed

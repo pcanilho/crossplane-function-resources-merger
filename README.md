@@ -37,7 +37,8 @@ EOF
 ```
 
 * If different permissions are to be granted to the function, a `Role` and `RoleBinding` should be created and
-attached to the `ServiceAccount` managed by a `DeploymentRuntimeConfig`. Once you're ready, add the below block to the above document:
+  attached to the `ServiceAccount` managed by a `DeploymentRuntimeConfig`. Once you're ready, add the below block to the
+  above document:
 
 ```yaml
 ...
@@ -155,6 +156,12 @@ A list of resources that will be used to merge into the target resource.
 > | Option | Description |
 > | --- | --- |
 > | `stringToMap` | String values will be transformed to the maps when possible. Allowing for deep-merging. |
+>
+> ➤ **mode**
+> | Option | Description |
+> | --- | --- |
+> | `managed` (default) | The function will create a managed resource. |
+> | `unmanaged` | The function will create an unmanaged resource. (deletion is not finalized by crossplane) |
 
 ## Example
 

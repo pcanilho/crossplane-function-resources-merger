@@ -162,7 +162,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	runtimeObject.SetGroupVersionKind(gvk)
 
 	// mode: detached (unmanaged resource)
-	if mode, err := xr.Resource.GetString("spec.mode"); err == nil && mode == "detached" {
+	if mode, err := xr.Resource.GetString("spec.mode"); err == nil && mode == "unmanaged" {
 		_, err = k8cCtl.CreateResource(ctx, in.TargetRef.Namespace, runtimeObject, v1.CreateOptions{})
 		if err != nil {
 			response.Fatal(rsp, errors.Wrapf(err, "failed to create resource %s/%s", in.TargetRef.Namespace, in.TargetRef.Ref.Name))
