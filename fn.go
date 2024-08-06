@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"dario.cat/mergo"
 	"github.com/pcanilho/crossplane-function-xresources-merger/input/v1alpha1"
@@ -19,8 +18,6 @@ import (
 	"github.com/crossplane/function-sdk-go"
 	fnv1beta1 "github.com/crossplane/function-sdk-go/proto/v1beta1"
 	"github.com/crossplane/function-sdk-go/request"
-	"github.com/crossplane/function-sdk-go/resource"
-	"github.com/crossplane/function-sdk-go/resource/composed"
 	"github.com/crossplane/function-sdk-go/response"
 )
 
@@ -161,40 +158,53 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	}
 	runtimeObject.SetGroupVersionKind(gvk)
 
-	// mode: detached (unmanaged resource)
-	if mode, err := xr.Resource.GetString("spec.mode"); err == nil && mode == "unmanaged" {
-		_, err = k8cCtl.CreateResource(ctx, in.TargetRef.Namespace, runtimeObject, v1.CreateOptions{})
-		if err != nil {
-			response.Fatal(rsp, errors.Wrapf(err, "failed to create resource %s/%s", in.TargetRef.Namespace, in.TargetRef.Ref.Name))
-			return rsp, nil
+	if mode, err := xr.Resource.GetString("spec.mode"); err != nil || mode == "managed" {
+		runtimeObject.Object["ownerReferences"] = []map[string]any{
+			{
+				"apiVersion":         xr.Resource.GetAPIVersion(),
+				"blockOwnerDeletion": true,
+				"controller":         true,
+				"kind":               xr.Resource.GetKind(),
+				"name":               xr.Resource.GetName(),
+				"uid":                xr.Resource.GetUID(),
+			},
 		}
-		response.Normalf(rsp, "Function ran successfully with input %v", in)
-		f.log.Info("Successfully composed resources...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
-		f.log.Debug("Generation results", "resource", runtimeObject.Object)
-		return rsp, nil
 	}
 
-	desired, err := request.GetDesiredComposedResources(req)
+	// mode: detached (unmanaged resource)
+	_, err = k8cCtl.CreateResource(ctx, in.TargetRef.Namespace, runtimeObject, v1.CreateOptions{})
 	if err != nil {
-		response.Fatal(rsp, errors.Wrapf(err, "cannot get desired resources from %T", req))
+		response.Fatal(rsp, errors.Wrapf(err, "failed to create resource %s/%s", in.TargetRef.Namespace, in.TargetRef.Ref.Name))
 		return rsp, nil
 	}
-
-	composed.Scheme.AddKnownTypeWithName(gvk, runtimeObject)
-	dc, err := composed.From(runtimeObject)
-	if err != nil {
-		response.Fatal(rsp, errors.Wrapf(err, "Unable to compose resource"))
-		return rsp, nil
-	}
-
-	rName := fmt.Sprintf("xmerger-%s", target.Ref.Name)
-	desired[resource.Name(rName)] = &resource.DesiredComposed{Resource: dc}
-	if err = response.SetDesiredComposedResources(rsp, desired); err != nil {
-		response.Fatal(rsp, errors.Wrapf(err, "cannot set desired composed resources in %T", rsp))
-		return rsp, nil
-	}
-	response.Normalf(rsp, "Successfully composed resource [external-name=%s] [resource=%s] [namespace=%s]", target.Ref.Name, in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
+	response.Normalf(rsp, "Function ran successfully with input %v", in)
 	f.log.Info("Successfully composed resources...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
 	f.log.Debug("Generation results", "resource", runtimeObject.Object)
 	return rsp, nil
+
+	// @TODO -> crossplane bug
+	// related: https://github.com/crossplane-contrib/provider-ansible/issues/172
+	// desired, err := request.GetDesiredComposedResources(req)
+	// if err != nil {
+	//	response.Fatal(rsp, errors.Wrapf(err, "cannot get desired resources from %T", req))
+	//	return rsp, nil
+	//}
+	//
+	// composed.Scheme.AddKnownTypeWithName(gvk, runtimeObject)
+	// dc, err := composed.From(runtimeObject)
+	//if err != nil {
+	//	response.Fatal(rsp, errors.Wrapf(err, "Unable to compose resource"))
+	//	return rsp, nil
+	//}
+	//
+	//rName := fmt.Sprintf("xmerger-%s", target.Ref.Name)
+	//desired[resource.Name(rName)] = &resource.DesiredComposed{Resource: dc}
+	//if err = response.SetDesiredComposedResources(rsp, desired); err != nil {
+	//	response.Fatal(rsp, errors.Wrapf(err, "cannot set desired composed resources in %T", rsp))
+	//	return rsp, nil
+	//}
+	//response.Normalf(rsp, "Successfully composed resource [external-name=%s] [resource=%s] [namespace=%s]", target.Ref.Name, in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
+	//f.log.Info("Successfully composed resources...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
+	//f.log.Debug("Generation results", "resource", runtimeObject.Object)
+	//return rsp, nil
 }
