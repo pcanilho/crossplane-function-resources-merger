@@ -177,7 +177,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 		response.Fatal(rsp, errors.Wrapf(err, "cannot set desired composed resources in %T", rsp))
 		return rsp, nil
 	}
-	response.Normalf(rsp, "Successfully composed resource [external-name:%s] [resource=%s] [namespace=%s]", target.Ref.Name, in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
+	response.Normalf(rsp, "Successfully composed resource [external-name=%s] [resource=%s] [namespace=%s]", target.Ref.Name, in.TargetRef.Ref.GroupVersionKind(), in.TargetRef.Namespace)
 	f.log.Info("Successfully composed resources...", "resource", in.TargetRef.Ref.GroupVersionKind(), "namespace", in.TargetRef.Namespace)
 	f.log.Debug("Generation results", "resource", runtimeObject.Object)
 	return rsp, nil

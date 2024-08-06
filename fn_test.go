@@ -204,15 +204,20 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Successfully composed resource [resource=/v1, Kind=ConfigMap] [namespace=ephemeral]",
+							Message:  "Successfully composed resource [external-name=map-merged] [resource=/v1, Kind=ConfigMap] [namespace=ephemeral]",
 						},
 					},
 					Desired: &fnv1beta1.State{
 						Resources: map[string]*fnv1beta1.Resource{
-							"map-merged": {
+							"xmerger-map-merged": {
 								Resource: resource.MustStructJSON(`{
 									"apiVersion": "v1",
 									"kind": "ConfigMap",
+									"metadata": {
+										"annotations": {
+											"crossplane.io/external-name": "map-merged"
+										}
+									},
 									"data": {
 										"key1": "a",
 										"key2": "c",
