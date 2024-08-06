@@ -13,8 +13,8 @@ import (
 // This isn't a custom resource, in the sense that we never install its CRD.
 // It is a KRM-like object, so we generate a CRD to describe its schema.
 
-// ResourceRef is a reference to a Kubernetes resource.
-type ResourceRef struct {
+// SourceRef is a reference to a Kubernetes resource.
+type SourceRef struct {
 	Ref            v1.TypedReference `json:",inline"`
 	Namespace      string            `json:"namespace,omitempty"`
 	ExtractFromKey string            `json:"extractFromKey,omitempty"`
@@ -28,7 +28,7 @@ type Input struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Debug        bool          `json:"debug,omitempty"`
-	TargetRef    ResourceRef   `json:"targetRef"`
-	ResourceRefs []ResourceRef `json:"resourceRefs"`
+	Debug      bool        `json:"debug,omitempty"`
+	TargetRef  SourceRef   `json:"targetRef"`
+	SourceRefs []SourceRef `json:"sourceRefs"`
 }

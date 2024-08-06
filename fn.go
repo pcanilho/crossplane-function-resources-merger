@@ -59,7 +59,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 		return rsp, nil
 	}
 
-	if in.ResourceRefs == nil || len(in.ResourceRefs) == 0 {
+	if in.SourceRefs == nil || len(in.SourceRefs) == 0 {
 		response.Fatal(rsp, errors.New("no resources to merge"))
 		return rsp, nil
 	}
@@ -86,7 +86,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 	}
 
 	var mergedResource map[string]any
-	for _, ref := range in.ResourceRefs {
+	for _, ref := range in.SourceRefs {
 		f.log.Debug("Attempting to find resource...", "GroupVersionKind", ref.Ref.GroupVersionKind(), "Name", ref.Ref.Name, "Namespace", ref.Namespace)
 		res, err := k8cCtl.GetResource(ctx, ref.Namespace, ref.Ref.Name, ref.Ref.GroupVersionKind(), v1.GetOptions{
 			TypeMeta: in.TypeMeta,
