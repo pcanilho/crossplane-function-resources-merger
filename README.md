@@ -22,7 +22,8 @@ produces a single resulting resource containing the merged result.
 ## Installing this function
 
 > [!IMPORTANT]
-> This function does not require cluster-wide privileges but does require create permissions on the target namespace.
+> It is recommended that this function is created with a custom `DeploymentRuntimeConfig` as to allow
+> for the function to have the necessary permissions to get/update/create resources.
 
 * Install using `kubectl`:
 
