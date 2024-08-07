@@ -40,10 +40,11 @@ EOF
 ```
 
 > [!TIP]
-> If different permissions are to be granted to the function, a `(Cluster)Role` and `(Cluster)RoleBinding` should be created and
+> If different permissions are to be granted to the function, a `(Cluster)Role` and `(Cluster)RoleBinding` should be
+> created and
 > attached to the `ServiceAccount` managed by a `DeploymentRuntimeConfig`. Once you're ready, add the below block to the
 > above document:
-> 
+>
 > ```yaml
 > ...
 > spec:
@@ -71,7 +72,8 @@ crossplane:
       - ghcr.io/pcanilho/crossplane-function-resources-merger:v0.1.5
 ```
 
-The above Helm chart will install the `pcanilho-crossplane-function-resources-merger` function into the Crossplane runtime.
+The above Helm chart will install the `pcanilho-crossplane-function-resources-merger` function into the Crossplane
+runtime.
 
 ## How-to-use
 
@@ -199,7 +201,7 @@ A list of resources that will be used to merge into the target resource.
 > ➤ **mode**
 > | Option | Description |
 > | --- | --- |
-> | `managed` (default) | The function will create a managed resource. |
+> | `managed` | `default` The function will create a managed resource. |
 > | `unmanaged` | The function will create an unmanaged resource. (deletion is not finalized by crossplane) |
 
 ## Example
