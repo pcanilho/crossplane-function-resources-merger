@@ -201,7 +201,7 @@ A list of resources that will be used to merge into the target resource.
 > ➤ **mode**
 > | Option | Description |
 > | --- | --- |
-> | `managed` | `default` The function will create a managed resource. |
+> | `managed` | The function will create a managed resource. (`default`)|
 > | `unmanaged` | The function will create an unmanaged resource. (deletion is not finalized by crossplane) |
 
 ## Example
