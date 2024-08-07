@@ -74,11 +74,15 @@ The above Helm chart will install the `pcanilho-crossplane-function-resources-me
 
 ### Function `Input` specification
 
-➤ `debug` (optional)
+<details>
+    <summary><i>debug (optional)</i></summary>
 
 If set to `true`, the function will output debug information.
 
-➤ `targetRef` (required)
+</details>
+
+<details>
+    <summary><i>targetRef</i></summary>
 
 Specifies the target resource that will be created/managed by this function.
 
@@ -89,7 +93,10 @@ Specifies the target resource that will be created/managed by this function.
 | `apiVersion` | The API version of the target resource.                                                     |
 | `kind`       | The kind of the target resource.                                                            |
 
-➤ `sourceRefs` (required)
+</details>
+
+<details>
+    <summary><i>sourceRefs</i></summary>
 
 A list of resources that will be used to merge into the target resource.
 
@@ -100,6 +107,8 @@ A list of resources that will be used to merge into the target resource.
 | `apiVersion`     | The API version of the resource.                          |
 | `kind`           | The kind of the resource.                                 |
 | `extractFromKey` | (Optional) The key to extract the data from the resource. |
+
+</details>
 
 > [!TIP]
 > Both `targetRef` and `sourceRefs` have full support for both standard kubernetes resources and custom-resources.
