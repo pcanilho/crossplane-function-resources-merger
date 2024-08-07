@@ -7,7 +7,7 @@
     An arbitrary resources merging function for Crossplane.
     <br>
     <br>
-    🔎 <a href="#how-to-use">How-to-use</a> | 🚀 <a href="#example">Get started with an Example</a>
+    ⚙️ <a href="#installing-this-function">Installing this function</a> | 🔎 <a href="#how-to-use">How-to-use</a> | 🚀 <a href="#example">Get started with an Example</a>
     <br>
 </p>
 
@@ -36,19 +36,39 @@ spec:
 EOF
 ```
 
-* If different permissions are to be granted to the function, a `Role` and `RoleBinding` should be created and
-  attached to the `ServiceAccount` managed by a `DeploymentRuntimeConfig`. Once you're ready, add the below block to the
-  above document:
+> [!TIP]
+> If different permissions are to be granted to the function, a `Role` and `RoleBinding` should be created and
+> attached to the `ServiceAccount` managed by a `DeploymentRuntimeConfig`. Once you're ready, add the below block to the
+> above document:
+> 
+> ```yaml
+> ...
+> spec:
+>   ...
+>   runtimeConfigRef:
+>     apiVersion: pkg.crossplane.io/v1beta1
+>     kind: RuntimeConfig
+>     name: <your-DeploymentRuntimeConfig>
+> ```
+
+* Installing using `helm`:
 
 ```yaml
+# Chart.yaml
 ...
-spec:
-  ...
-  runtimeConfigRef:
-    apiVersion: pkg.crossplane.io/v1beta1
-    kind: RuntimeConfig
-    name: <your-DeploymentRuntimeConfig>
+dependencies:
+  - name: crossplane
+    version: <your-crossplane-version>
+    repository: https://charts.crossplane.io/master/
+---
+# values.yaml
+crossplane:
+  function:
+    packages:
+      - ghcr.io/pcanilho/crossplane-function-resources-merger:v0.1.5
 ```
+
+The above Helm chart will install the `pcanilho-crossplane-function-resources-merger` function into the Crossplane runtime.
 
 ## How-to-use
 
