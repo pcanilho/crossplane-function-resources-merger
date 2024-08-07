@@ -86,6 +86,8 @@ If set to `true`, the function will output debug information.
 <details>
     <summary><i><b>targetRef</b> [expand]</i></summary>
 
+`Mandatory`
+
 Specifies the target resource that will be created/managed by this function.
 
 | Field        | Description                                                                                 |
@@ -99,6 +101,8 @@ Specifies the target resource that will be created/managed by this function.
 
 <details>
     <summary><i><b>sourceRefs</b> [expand]</i></summary>
+
+`Mandatory`
 
 A list of resources that will be used to merge into the target resource.
 
