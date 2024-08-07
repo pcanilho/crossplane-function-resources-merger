@@ -11,11 +11,12 @@
     <br>
 </p>
 
-> [!IMPORTANT]
-> This function is under development and is not yet ready for production use.
-
 This is a crossplane function that merges any Kubernetes resources which contain a root `data` field in their spec and
 produces a single resulting resource containing the merged result.
+
+## Requirements
+
+* `crossplane` >= v.1.15
 
 ## Installing this function
 
