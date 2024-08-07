@@ -9,6 +9,7 @@
     <br>
     ⚙️ <a href="#installing-this-function">Installing this function</a> | 🔎 <a href="#how-to-use">How-to-use</a> | 🚀 <a href="#example">Get started with an Example</a>
     <br>
+    <br>
 </p>
 
 This is a crossplane function that merges any Kubernetes resources which contain a root `data` field in their spec and
