@@ -101,7 +101,7 @@ jobs:
 
       - name: Build Runtime
         id: image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: ${{ matrix.os }}/${{ matrix.arch }}
