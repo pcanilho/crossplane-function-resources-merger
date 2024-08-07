@@ -75,14 +75,15 @@ The above Helm chart will install the `pcanilho-crossplane-function-resources-me
 ### Function `Input` specification
 
 <details>
-    <summary><i>debug (optional)</i></summary>
+    <summary><i><b>debug</b> (click to expand...)</i></summary>
 
+`Optional`
 If set to `true`, the function will output debug information.
 
 </details>
 
 <details>
-    <summary><i>targetRef</i></summary>
+    <summary><i><b>targetRef</b> (click to expand...)<</i></summary>
 
 Specifies the target resource that will be created/managed by this function.
 
@@ -96,7 +97,7 @@ Specifies the target resource that will be created/managed by this function.
 </details>
 
 <details>
-    <summary><i>sourceRefs</i></summary>
+    <summary><i><b>sourceRefs</b> (click to expand...)<</i></summary>
 
 A list of resources that will be used to merge into the target resource.
 
