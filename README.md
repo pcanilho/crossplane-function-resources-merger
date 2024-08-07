@@ -75,6 +75,7 @@ The above Helm chart will install the `pcanilho-crossplane-function-resources-me
 ### Function `Input` specification
 
 `debug` (optional)
+
 If set to `true`, the function will output debug information.
 
 `targetRef` (required)
