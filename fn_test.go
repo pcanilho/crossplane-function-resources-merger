@@ -149,7 +149,7 @@ func TestRunFunction(t *testing.T) {
 				},
 			},
 		},
-		"FoundAndMerged": {
+		"FoundAndMergedUnmanaged": {
 			args: args{
 				ctx: context.Background(),
 				req: &fnv1beta1.RunFunctionRequest{
@@ -208,28 +208,6 @@ func TestRunFunction(t *testing.T) {
 							Message:  "Successfully composed resource [name=map-merged] [resource=/v1, Kind=ConfigMap] [namespace=ephemeral]",
 						},
 					},
-					//Desired: &fnv1beta1.State{
-					//	Resources: map[string]*fnv1beta1.Resource{
-					//		"xmerger-map-merged": {
-					//			Resource: resource.MustStructJSON(`{
-					//				"apiVersion": "v1",
-					//				"kind": "ConfigMap",
-					//				"metadata": {
-					//					"namespace": "ephemeral",
-					//					"name": "map-merged",
-					//					"annotations": {
-					//						"crossplane.io/external-name": "map-merged"
-					//					}
-					//				},
-					//				"data": {
-					//					"key1": "a",
-					//					"key2": "c",
-					//					"key4": "d"
-					//				}
-					//			}`),
-					//		},
-					//	},
-					// },
 				},
 			},
 		},
