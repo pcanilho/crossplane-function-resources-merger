@@ -40,7 +40,7 @@ EOF
 ```
 
 > [!TIP]
-> If different permissions are to be granted to the function, a `Role` and `RoleBinding` should be created and
+> If different permissions are to be granted to the function, a `(Cluster)Role` and `(Cluster)RoleBinding` should be created and
 > attached to the `ServiceAccount` managed by a `DeploymentRuntimeConfig`. Once you're ready, add the below block to the
 > above document:
 > 
