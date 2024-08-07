@@ -74,11 +74,11 @@ The above Helm chart will install the `pcanilho-crossplane-function-resources-me
 
 ### Function `Input` specification
 
-`debug` (optional)
+* `debug` (optional)
 
 If set to `true`, the function will output debug information.
 
-`targetRef` (required)
+* `targetRef` (required)
 
 Specifies the target resource that will be created/managed by this function.
 
@@ -89,7 +89,7 @@ Specifies the target resource that will be created/managed by this function.
 | `apiVersion` | The API version of the target resource.                                                     |
 | `kind`       | The kind of the target resource.                                                            |
 
-`sourceRefs` (required)
+* `sourceRefs` (required)
 
 A list of resources that will be used to merge into the target resource.
 
