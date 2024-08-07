@@ -194,7 +194,7 @@ A list of resources that will be used to merge into the target resource.
 > ➤ **transform**
 > | Option | Description |
 > | --- | --- |
-> | `stringToMap` | String values will be transformed to the maps when possible. Allowing for deep-merging. |
+> | `stringToMap` | String values will be transformed to maps when possible. Allowing for deep-merging. |
 >
 > ➤ **mode**
 > | Option | Description |
