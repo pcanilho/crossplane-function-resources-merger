@@ -1,0 +1,14 @@
+---
+apiVersion: meta.pkg.crossplane.io/v1beta1
+kind: Function
+metadata:
+  name: function-xresources-merger
+  annotations:
+    meta.crossplane.io/maintainer: Paulo Canilho <paulo@canilho.net>
+    meta.crossplane.io/source: github.com/pcanilho/crossplane-function-resources-merger
+    meta.crossplane.io/license: Apache-2.0
+    meta.crossplane.io/description: An arbitrary resources merger function.
+    meta.crossplane.io/readme: |
+      This is a crossplane function that merges any Kubernetes resources which contain a root `data` field in their spec and
+      produces a single resulting resource containing the merged result.
+spec: {}
