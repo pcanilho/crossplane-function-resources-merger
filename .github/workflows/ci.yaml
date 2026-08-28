@@ -1,9 +1,8 @@
 name: CI
 
+# Least privilege by default; jobs that need more request it.
 permissions:
-  contents: write
-  packages: write
-  id-token: write
+  contents: read
 
 on:
   push:
@@ -21,134 +20,150 @@ on:
         required: false
 
 env:
-  GO_VERSION: '1.22.5'
-  GOLANGCI_VERSION: 'v1.59.1'
-  DOCKER_BUILDX_VERSION: 'v0.11.2'
+  GO_VERSION: '1.25.14'
+  GOLANGCI_VERSION: 'v2.13.2'
+  KO_VERSION: 'v0.19.1'
 
-  XP_CHANNEL: master
-  XP_VERSION: current
+  # Pinned. Previously tracked the master channel, so every published package
+  # was built by an unreleased nightly CLI.
+  XP_VERSION: 'v2.5.0'
 
-  XPKG: ghcr.io/${{ github.repository}}
+  XPKG: ghcr.io/${{ github.repository }}
   XPKG_VERSION: ${{ inputs.version }}
 
 jobs:
   lint:
-    timeout-minutes: 5
-    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
 
+      - name: Check go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ env.GOLANGCI_VERSION }}
 
   unit-test:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      # internal/k8s talks to a real API server, so most test cases need a live
+      # cluster. Removable once sources are read via required resources.
       - name: Create k8s Kind Cluster
-        uses: helm/kind-action@v1
+        uses: helm/kind-action@v1.14.0
 
       - name: Prepare k8s Cluster
         run: |
-            kubectl create namespace ephemeral
-            kubectl create cm map-1 -n ephemeral --from-literal=key1=a --from-literal=key2=a
-            kubectl create cm map-2 -n ephemeral --from-literal=key2=c --from-literal=key4=d
+          kubectl create namespace ephemeral
+          kubectl create cm map-1 -n ephemeral --from-literal=key1=a --from-literal=key2=a
+          kubectl create cm map-2 -n ephemeral --from-literal=key2=c --from-literal=key4=d
 
       - name: Run Unit Tests
         run: go test -v -cover ./...
 
   build:
-    timeout-minutes: 5
-    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: true
       matrix:
-        os:
-          - linux
         arch:
           - amd64
           - arm64
     steps:
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          version: ${{ env.DOCKER_BUILDX_VERSION }}
-          install: true
-
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Build Runtime
-        id: image
-        uses: docker/build-push-action@v6
+      - name: Setup Go
+        uses: actions/setup-go@v7
         with:
-          context: .
-          platforms: ${{ matrix.os }}/${{ matrix.arch }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          target: image
-          build-args:
-            GO_VERSION=${{ env.GO_VERSION }}
-          outputs: type=docker,dest=runtime-${{ matrix.arch }}.tar
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup ko
+        uses: ko-build/setup-ko@v0.10
+        with:
+          version: ${{ env.KO_VERSION }}
+
+      # --push=false with a non-ko.local KO_DOCKER_REPO selects the tarball
+      # publisher. See .ko.yaml.
+      - name: Build Runtime Image
+        env:
+          KO_DOCKER_REPO: ${{ env.XPKG }}
+        run: |
+          ko build \
+            --push=false \
+            --bare \
+            --platform=linux/${{ matrix.arch }} \
+            --tarball=runtime-${{ matrix.arch }}.tar \
+            --sbom=spdx \
+            --sbom-dir=. \
+            .
 
       - name: Setup the Crossplane CLI
-        run: "curl -sL https://raw.githubusercontent.com/crossplane/crossplane/master/install.sh | sh"
+        run: curl -sfL https://cli.crossplane.io/install.sh | XP_VERSION=${{ env.XP_VERSION }} sh
 
       - name: Build Package
         run: ./crossplane xpkg build --package-file=${{ matrix.arch }}.xpkg --package-root=package/ --embed-runtime-image-tarball=runtime-${{ matrix.arch }}.tar
 
       - name: Upload Single-Platform Package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: package-${{ matrix.arch }}
-          path: "*.xpkg"
+          path: |
+            *.xpkg
+            *.spdx.json
           if-no-files-found: error
           retention-days: 1
 
   push:
-    timeout-minutes: 5
-    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    # Without this, every same-repo PR publishes a package built from
+    # unreviewed code: GITHUB_TOKEN still carries packages: write.
+    if: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      contents: write # gh release create
+      packages: write # ghcr.io push
     needs:
       - build
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download Single-Platform Packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: .
           merge-multiple: true
 
       - name: Setup the Crossplane CLI
-        run: "curl -sL https://raw.githubusercontent.com/crossplane/crossplane/master/install.sh | sh"
+        run: curl -sfL https://cli.crossplane.io/install.sh | XP_VERSION=${{ env.XP_VERSION }} sh
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          # github.actor is dependabot[bot] on bot runs and cannot authenticate.
+          username: ${{ github.repository_owner }}
           password: ${{ github.token }}
 
       - name: Generate new Release
@@ -157,9 +172,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Registries only publish valid semver tags, hence the v0.0.0- prefix.
       - name: Set Default Multi-Platform Package Version
         if: env.XPKG_VERSION == ''
-        run: echo "XPKG_VERSION=$(date -d@$(git show -s --format=%ct) +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)" >> $GITHUB_ENV
+        run: echo "XPKG_VERSION=v0.0.0-$(date -d@$(git show -s --format=%ct) +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)" >> $GITHUB_ENV
 
       - name: Push Multi-Platform Package to the GitHub Container Registry
-        run: "./crossplane --verbose xpkg push --package-files $(echo *.xpkg|tr ' ' ,) ${{ env.XPKG }}:${{ env.XPKG_VERSION }}"
+        run: "./crossplane --verbose xpkg push --package-files $(echo *.xpkg|tr ' ' ,) ${XPKG@L}:${{ env.XPKG_VERSION }}"

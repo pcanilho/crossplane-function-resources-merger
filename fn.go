@@ -50,7 +50,7 @@ func (f *Function) RunFunction(ctx context.Context, req *fnv1beta1.RunFunctionRe
 		return rsp, nil
 	}
 
-	if in.SourceRefs == nil || len(in.SourceRefs) == 0 {
+	if len(in.SourceRefs) == 0 {
 		response.Fatal(rsp, errors.New("no resources to merge"))
 		return rsp, nil
 	}

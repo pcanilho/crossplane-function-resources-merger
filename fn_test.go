@@ -15,6 +15,8 @@ import (
 	"github.com/crossplane/function-sdk-go/response"
 )
 
+const testTag = "test"
+
 func TestRunFunction(t *testing.T) {
 	type args struct {
 		ctx context.Context
@@ -34,7 +36,7 @@ func TestRunFunction(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				req: &fnv1beta1.RunFunctionRequest{
-					Meta: &fnv1beta1.RequestMeta{Tag: "test"},
+					Meta: &fnv1beta1.RequestMeta{Tag: testTag},
 					Input: resource.MustStructJSON(`{
 						"apiVersion": "resources-merger.fn.canilho.net/v1alpha1",
 						"kind": "Input",
@@ -48,7 +50,7 @@ func TestRunFunction(t *testing.T) {
 			},
 			want: want{
 				rsp: &fnv1beta1.RunFunctionResponse{
-					Meta: &fnv1beta1.ResponseMeta{Tag: "test", Ttl: durationpb.New(response.DefaultTTL)},
+					Meta: &fnv1beta1.ResponseMeta{Tag: testTag, Ttl: durationpb.New(response.DefaultTTL)},
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_FATAL,
@@ -62,7 +64,7 @@ func TestRunFunction(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				req: &fnv1beta1.RunFunctionRequest{
-					Meta: &fnv1beta1.RequestMeta{Tag: "test"},
+					Meta: &fnv1beta1.RequestMeta{Tag: testTag},
 					Input: resource.MustStructJSON(`{
 						"apiVersion": "resources-merger.fn.canilho.net/v1alpha1",
 						"kind": "Input"
@@ -71,7 +73,7 @@ func TestRunFunction(t *testing.T) {
 			},
 			want: want{
 				rsp: &fnv1beta1.RunFunctionResponse{
-					Meta: &fnv1beta1.ResponseMeta{Tag: "test", Ttl: durationpb.New(response.DefaultTTL)},
+					Meta: &fnv1beta1.ResponseMeta{Tag: testTag, Ttl: durationpb.New(response.DefaultTTL)},
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_FATAL,
@@ -85,7 +87,7 @@ func TestRunFunction(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				req: &fnv1beta1.RunFunctionRequest{
-					Meta: &fnv1beta1.RequestMeta{Tag: "test"},
+					Meta: &fnv1beta1.RequestMeta{Tag: testTag},
 					Input: resource.MustStructJSON(`{
 						"apiVersion": "resources-merger.fn.canilho.net/v1alpha1",
 						"kind": "Input",
@@ -97,7 +99,7 @@ func TestRunFunction(t *testing.T) {
 			},
 			want: want{
 				rsp: &fnv1beta1.RunFunctionResponse{
-					Meta: &fnv1beta1.ResponseMeta{Tag: "test", Ttl: durationpb.New(response.DefaultTTL)},
+					Meta: &fnv1beta1.ResponseMeta{Tag: testTag, Ttl: durationpb.New(response.DefaultTTL)},
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_FATAL,
@@ -111,7 +113,7 @@ func TestRunFunction(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				req: &fnv1beta1.RunFunctionRequest{
-					Meta: &fnv1beta1.RequestMeta{Tag: "test"},
+					Meta: &fnv1beta1.RequestMeta{Tag: testTag},
 					Input: resource.MustStructJSON(`{
 						"apiVersion": "resources-merger.fn.canilho.net/v1alpha1",
 						"kind": "Input",
@@ -139,7 +141,7 @@ func TestRunFunction(t *testing.T) {
 			},
 			want: want{
 				rsp: &fnv1beta1.RunFunctionResponse{
-					Meta: &fnv1beta1.ResponseMeta{Tag: "test", Ttl: durationpb.New(response.DefaultTTL)},
+					Meta: &fnv1beta1.ResponseMeta{Tag: testTag, Ttl: durationpb.New(response.DefaultTTL)},
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_FATAL,
@@ -172,7 +174,7 @@ func TestRunFunction(t *testing.T) {
 							}`),
 						},
 					},
-					Meta: &fnv1beta1.RequestMeta{Tag: "test"},
+					Meta: &fnv1beta1.RequestMeta{Tag: testTag},
 					Input: resource.MustStructJSON(`{
 						"apiVersion": "resources-merger.fn.canilho.net/v1alpha1",
 						"kind": "Input",
@@ -201,7 +203,7 @@ func TestRunFunction(t *testing.T) {
 			},
 			want: want{
 				rsp: &fnv1beta1.RunFunctionResponse{
-					Meta: &fnv1beta1.ResponseMeta{Tag: "test", Ttl: durationpb.New(response.DefaultTTL)},
+					Meta: &fnv1beta1.ResponseMeta{Tag: testTag, Ttl: durationpb.New(response.DefaultTTL)},
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,

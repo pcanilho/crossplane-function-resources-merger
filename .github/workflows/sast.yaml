@@ -1,17 +1,24 @@
 ---
 name: SAST
+
+# The job only reads the tree.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Run Gosec Security Scanner
-        uses: securego/gosec@master
+        # Was @master, a mutable ref executing with this workflow's token.
+        uses: securego/gosec@v2.29.0
         with:
           args: ./...

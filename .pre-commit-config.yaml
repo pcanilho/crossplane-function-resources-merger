@@ -1,22 +1,26 @@
+---
 repos:
+  # The official hooks install a pinned golangci-lint rather than using
+  # whatever is on PATH. config-verify catches config schema drift.
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.13.2
+    hooks:
+      - id: golangci-lint-config-verify
+      - id: golangci-lint-full
+
   - repo: local
     hooks:
-      - id: golangci-lint
-        name: golangci-lint
-        entry: golangci-lint run -c .golangci.yaml --fix
+      - id: go-mod-tidy
+        name: go mod tidy
+        entry: go mod tidy
         language: system
         pass_filenames: false
-  - repo: local
-    hooks:
+
       - id: tests
         name: run tests
-        entry: go test -v ./...
+        entry: go test ./...
         language: system
         pass_filenames: false
-  - repo: local
-    hooks:
-      - id: sast
-        name: run security analysis
-        entry: gosec ./...
-        language: system
-        pass_filenames: false
+
+  # No standalone gosec hook: golangci-lint already runs it. The SARIF upload
+  # to code scanning lives in .github/workflows/sast.yaml.
