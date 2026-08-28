@@ -5,6 +5,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
   - package-ecosystem: gomod
     directory: "/"
     schedule:
@@ -18,7 +24,13 @@ updates:
           - "minor"
           - "patch"
     ignore:
+      # internal/merger and internal/transformer decode the XR into structs with
+      # no json tags, relying on apimachinery lowercasing untagged field names.
+      # That was removed in k8s.io/apimachinery v0.34.0, after which
+      # spec.options and spec.transform decode to an empty map with no error,
+      # inverting merge precedence. No test covers it.
+      #
+      # Bumping crossplane-runtime pulls newer k8s.io/* transitively. Remove
+      # this ignore only after those structs carry explicit json tags.
       - dependency-name: "github.com/crossplane/crossplane-runtime"
-        versions: [ "*" ]
-      - dependency-name: "github.com/imdario/mergo"
-        versions: [ "*" ]
+        versions: ["*"]
