@@ -18,7 +18,7 @@ var transformerMap = map[string]func(io) io{
 }
 
 // Transform parses a given XR composite and applies any found settings by running the appropriate transformer.
-func Transform(xr *resource.Composite, in io) (io, error) {
+func Transform(xr *resource.Composite, in map[string]any) (map[string]any, error) {
 	type xrSpec struct {
 		Spec struct {
 			Transform map[string]bool
