@@ -1,1 +1,11 @@
 .idea
+
+# xpkg build artifacts.
+*.xpkg
+runtime-*.tar
+
+# Crossplane CLI, installed into the repo root by install.sh.
+/crossplane
+
+# golangci-lint migrate backup.
+*.bck.yaml

@@ -1,0 +1,23 @@
+# CI builds the runtime image with ko instead of the Dockerfile.
+# `crossplane xpkg build --embed-runtime-image-tarball` reads tarballs with
+# go-containerregistry's tarball.ImageFromPath and ko writes with the same
+# library. Verified on amd64 and arm64.
+#
+# Drops the Docker daemon, setup-qemu, setup-buildx and build-push-action,
+# avoids QEMU emulation for arm64, and emits an SPDX SBOM per image.
+#
+# Base is pinned to distroless static rather than ko's default
+# cgr.dev/chainguard/static, matching crossplane/function-template-go.
+# The Dockerfile is kept as a fallback and must stay in sync.
+defaultBaseImage: gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+
+builds:
+  - id: function
+    main: .
+    env:
+      - CGO_ENABLED=0
+    # ko sets -trimpath by default. -s -w keep Go build info, so vulnerability
+    # scanners still see the dependency graph.
+    ldflags:
+      - -s
+      - -w
