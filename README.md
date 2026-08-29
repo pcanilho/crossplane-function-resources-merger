@@ -2,7 +2,7 @@
 [![Dependabot Updates](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/dependabot/dependabot-updates)
 [![SAST](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/sast.yaml/badge.svg)](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/sast.yaml)
 
-![version](https://img.shields.io/badge/Version-v0.1.8-blue)
+![version](https://img.shields.io/badge/Version-v0.2.0-blue)
 <p align="center" width="100%">
     <img src="https://github.com/pcanilho/crossplane-function-resources-merger/blob/main/docs/images/banner.png?raw=true" width="220"></img>
     <br>
@@ -41,7 +41,7 @@ kind: Function
 metadata:
   name: function-resources-merger
 spec:
-  package: ghcr.io/pcanilho/crossplane-function-resources-merger:v0.1.8
+  package: ghcr.io/pcanilho/crossplane-function-resources-merger:v0.2.0
 EOF
 ```
 
@@ -59,7 +59,7 @@ dependencies:
 crossplane:
   function:
     packages:
-      - ghcr.io/pcanilho/crossplane-function-resources-merger:v0.1.8
+      - ghcr.io/pcanilho/crossplane-function-resources-merger:v0.2.0
 ```
 
 The above Helm chart will install the `pcanilho-crossplane-function-resources-merger` function into the Crossplane
