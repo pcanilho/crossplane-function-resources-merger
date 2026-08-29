@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v0.2.0]
+## [0.2.0] - 2026-08-29
 
 A full rewrite of the function as a pure composition function on Crossplane v2.
 Every `Input` field and every XR field from v0.1.x changed. Read
@@ -174,9 +174,9 @@ than composed, so Crossplane does not know about them. Delete them before
 upgrading, or the function's server side apply will contend with whatever is
 already there.
 
-## [v0.1.8]
+## [0.1.8] - 2024-08-12
 
 See the [release notes](https://github.com/pcanilho/crossplane-function-resources-merger/releases/tag/v0.1.8).
 
-[v0.2.0]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.1.8...v0.2.0
-[v0.1.8]: https://github.com/pcanilho/crossplane-function-resources-merger/releases/tag/v0.1.8
+[0.2.0]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.1.8...v0.2.0
+[0.1.8]: https://github.com/pcanilho/crossplane-function-resources-merger/releases/tag/v0.1.8

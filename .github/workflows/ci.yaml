@@ -207,11 +207,43 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ github.token }}
 
+      - name: Extract changelog section
+        id: notes
+        if: env.XPKG_VERSION != ''
+        env:
+          TAG: ${{ env.XPKG_VERSION }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          notes_file="$RUNNER_TEMP/notes.md"
+          # Extract the body of the matching '## [version]' section, stopping
+          # at the next '## [' header or EOF. The header line itself is dropped
+          # (the release title already shows the version).
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { found = 1; next }
+            found && /^## \[/           { exit }
+            found                        { print }
+          ' CHANGELOG.md > "$notes_file"
+          if [ ! -s "$notes_file" ]; then
+            echo "::error::No CHANGELOG.md section found for ${TAG} (looked for '## [${version}]'). Add the section before tagging."
+            exit 1
+          fi
+          echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
+
       - name: Generate new Release
         if: env.XPKG_VERSION != ''
-        run: gh release create ${{ env.XPKG_VERSION }} --title ${{ env.XPKG_VERSION }} --generate-notes *.xpkg
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ env.XPKG_VERSION }}
+          NOTES_FILE: ${{ steps.notes.outputs.notes_file }}
+        run: |
+          set -euo pipefail
+          prerelease_flag=""
+          case "$TAG" in *-*) prerelease_flag="--prerelease" ;; esac
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file "$NOTES_FILE" \
+            $prerelease_flag *.xpkg
 
       # Registries only publish valid semver tags, hence the v0.0.0- prefix.
       - name: Set Default Multi-Platform Package Version
