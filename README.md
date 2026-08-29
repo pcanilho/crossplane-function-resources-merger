@@ -274,10 +274,10 @@ spec:
         mergeStrategy: ForceMergeObjects
         parseEmbedded: true
         target:
-          namespace: ephemeral
-          name: merged
           apiVersion: v1
           kind: ConfigMap
+          nameFromCompositeFieldPath: spec.appName
+          namespace: ephemeral
         sources:
           - name: map-1
             ref:
