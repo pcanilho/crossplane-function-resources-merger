@@ -1,0 +1,182 @@
+# Changelog
+
+All notable changes to this project are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [v0.2.0]
+
+A full rewrite of the function as a pure composition function on Crossplane v2.
+Every `Input` field and every XR field from v0.1.x changed. Read
+[Migrating from v0.1.x](#migrating-from-v01x) before upgrading.
+
+### Breaking
+
+- **Crossplane v2.0.0 is now the minimum.** The function resolves its sources
+  through `req.RequiredResources`, which Crossplane only began populating in
+  v2.0.0. `package/crossplane.yaml` declares `spec.crossplane.version:
+  ">=v2.0.0"`, so older Crossplane refuses to install the package.
+- **The package is renamed** from `function-xresources-merger` to
+  `function-resources-merger`, and its metadata moved from
+  `meta.pkg.crossplane.io/v1beta1` to `meta.pkg.crossplane.io/v1`. Update the
+  `Function` and every `functionRef.name` that points at it.
+- **The `Input` API moved from `v1alpha1` to `v1alpha2`** with an incompatible
+  shape. `targetRef` became `target`, `sourceRefs` became `sources`, and the
+  inline `TypedReference` on each source became a `ref` block. Each source now
+  carries a required unique `name`, which is the key Crossplane resolves it
+  under. A source's `key` and `extractFromKey` collapsed into one
+  `fromFieldPath`, a full field path into the resource such as `data.settings`;
+  the target's `key` became `toFieldPath`. Both default to `data`.
+- **Merge behaviour is configured on the `Input`, not on the XR.** The XR's
+  `spec.options` map (`override`, `appendSlice`, `sliceDeepCopy`,
+  `overwriteEmptyValue`, `overrideEmptySlice`, `typeCheck`) and
+  `spec.transform.stringToMap` are gone, replaced by the `mergeStrategy` enum
+  and `parseEmbedded`. `spec.debug` moved to the `Input`'s `debug` field.
+- **`spec.mode` is gone.** The function no longer writes `ownerReferences` by
+  hand. The merged resource is a composed resource, so Crossplane reconciles it
+  and garbage collects it with the XR. There is no unmanaged mode.
+- **The function no longer calls the Kubernetes API.** It has no client, no
+  kubeconfig and no direct reads. Sources are resolved by Crossplane through
+  the required resources handshake, so they must be readable by Crossplane's
+  own `ServiceAccount`.
+- **The composite resource must be cluster scoped.** Any namespaced XR is
+  rejected with a fatal result, unconditionally. Namespaced is the default
+  shape for an `apiextensions.crossplane.io/v2` XRD, so the XRD must say
+  `scope: Cluster` explicitly. Namespaced support is deferred.
+- A `Secret` source requires a `Secret` target. Merging a `Secret` into a
+  `ConfigMap` is rejected rather than emitting base64 into plaintext.
+- The example XRD moved to `apiextensions.crossplane.io/v2` with an explicit
+  `scope: Cluster`, dropped `claimNames`, and renamed the composite kind from
+  `xMerger` to `XMerger`.
+
+### Added
+
+- `mergeStrategy` with five named strategies matching the vocabulary of
+  `function-patch-and-transform`: `Replace`, `MergeObjects`,
+  `ForceMergeObjects`, `MergeObjectsAppendArrays` and
+  `ForceMergeObjectsAppendArrays`. The default is `ForceMergeObjects`.
+- `resolution: Required | Optional` per source. An `Optional` source that does
+  not exist is skipped and named in the `Merged` condition; a `Required` one
+  that does not exist is fatal.
+- `target.nameFromCompositeFieldPath` and `target.namespaceFromCompositeFieldPath`
+  to derive the target's identity from the XR.
+- `target.metadata.labels` and `target.metadata.annotations`.
+- `parseEmbedded`, which decodes string values that are YAML mappings so an
+  embedded document deep merges instead of being replaced wholesale.
+- `Secret` support. Values read from a `Secret` source are base64 decoded
+  before the merge and re-encoded into `data` for a `Secret` target.
+  `stringData` is never written, because server side apply does not persist it.
+- A `Merged` condition on the composite and claim reporting how many sources
+  merged and which optional ones were skipped.
+- The composed resource is emitted with `Ready: True`, so it does not hold the
+  composite unready.
+- Unit tests for the merger and transformer packages, and an offline
+  `crossplane render` golden file check in CI, driven by
+  `example/required-resources.yaml` and `example/rendered.golden.yaml`.
+- `.ko.yaml`, so the runtime image is built with `ko` instead of Docker buildx.
+
+### Changed
+
+- Sources merge in declared order. Under `ForceMergeObjects`,
+  `ForceMergeObjectsAppendArrays` and `Replace` a later source wins a conflict;
+  under `MergeObjects` and `MergeObjectsAppendArrays` the first value set wins.
+- The merge no longer mutates its inputs. Both sides are deep copied.
+- Go 1.22.3 to 1.25.10 in `go.mod`; CI builds and tests on Go 1.27.
+- `function-sdk-go` v0.2.0 to v0.7.1, `crossplane-runtime` v1.15.0 to
+  `crossplane-runtime/v2` v2.3.1, `k8s.io/apimachinery` v0.30.3 to v0.35.3,
+  `mergo` v1.0.0 to v1.0.2.
+
+### Removed
+
+- `k8s.io/client-go` and the `internal/k8s` controller that wrapped it.
+- `internal/maps`.
+- The dead code block in `fn.go` that worked around
+  [provider-ansible#172](https://github.com/crossplane-contrib/provider-ansible/issues/172).
+  That issue concerned namespaced composed resources under Crossplane v1 and
+  was fixed before v1.15.
+
+### Fixed
+
+- The merged resource is now part of the desired state, so it is reconciled on
+  drift and deleted with the XR. Previously it was created out of band with a
+  direct API call and orphaned on deletion.
+- Earlier pipeline steps' desired resources are preserved instead of being
+  overwritten.
+- Sources are walked in declared order rather than by ranging a Go map, so the
+  merge result no longer depends on map iteration order.
+
+### Migrating from v0.1.x
+
+Before:
+
+```yaml
+# XR
+spec:
+  mode: managed
+  debug: true
+  options:
+    override: true
+  transform:
+    stringToMap: true
+
+# Composition input
+apiVersion: resources-merger.fn.canilho.net/v1alpha1
+kind: Input
+targetRef:
+  namespace: ephemeral
+  name: merged
+  apiVersion: v1
+  kind: ConfigMap
+sourceRefs:
+  - namespace: ephemeral
+    name: map-1
+    apiVersion: v1
+    kind: ConfigMap
+```
+
+After:
+
+```yaml
+# XR
+spec:
+  appName: merged
+
+# Composition input
+apiVersion: resources-merger.fn.canilho.net/v1alpha2
+kind: Input
+debug: true
+mergeStrategy: ForceMergeObjects
+parseEmbedded: true
+target:
+  apiVersion: v1
+  kind: ConfigMap
+  nameFromCompositeFieldPath: spec.appName
+  namespace: ephemeral
+sources:
+  - name: map-1
+    ref:
+      apiVersion: v1
+      kind: ConfigMap
+      namespace: ephemeral
+      name: map-1
+```
+
+`options.override: true` maps to `mergeStrategy: ForceMergeObjects`, and
+`options.override` unset maps to `MergeObjects`. Add `options.appendSlice` to
+either to reach the `AppendArrays` variant. `transform.stringToMap` maps to
+`parseEmbedded`. A source's `key: spec` plus `extractFromKey: settings` becomes
+`fromFieldPath: spec.settings`. `sliceDeepCopy`, `overwriteEmptyValue`,
+`overrideEmptySlice` and `typeCheck` have no equivalent and were dropped.
+
+Resources merged by v0.1.x are not adopted. They were created directly rather
+than composed, so Crossplane does not know about them. Delete them before
+upgrading, or the function's server side apply will contend with whatever is
+already there.
+
+## [v0.1.8]
+
+See the [release notes](https://github.com/pcanilho/crossplane-function-resources-merger/releases/tag/v0.1.8).
+
+[v0.2.0]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.1.8...v0.2.0
+[v0.1.8]: https://github.com/pcanilho/crossplane-function-resources-merger/releases/tag/v0.1.8
