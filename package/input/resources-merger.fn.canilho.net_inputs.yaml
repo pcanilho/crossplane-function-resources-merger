@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.15.0
+    controller-gen.kubebuilder.io/version: v0.20.1
   name: inputs.resources-merger.fn.canilho.net
 spec:
   group: resources-merger.fn.canilho.net
@@ -16,7 +16,7 @@ spec:
     singular: input
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - name: v1alpha2
     schema:
       openAPIV3Schema:
         description: Input can be used to provide input to this Function.
@@ -38,65 +38,104 @@ spec:
               In CamelCase.
               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
+          mergeStrategy:
+            description: MergeStrategy selects how a source is merged onto the accumulator.
+            enum:
+            - Replace
+            - MergeObjects
+            - ForceMergeObjects
+            - MergeObjectsAppendArrays
+            - ForceMergeObjectsAppendArrays
+            type: string
           metadata:
             type: object
-          sourceRefs:
+          parseEmbedded:
+            description: |-
+              ParseEmbedded decodes string values that are YAML mappings so their
+              contents deep merge instead of being replaced wholesale.
+            type: boolean
+          sources:
             items:
-              description: SourceRef is a reference to a Kubernetes resource.
+              description: Source is one input to the merge. Order in Input.Sources
+                is precedence order.
               properties:
-                apiVersion:
-                  description: APIVersion of the referenced object.
-                  type: string
-                extractFromKey:
-                  type: string
-                key:
-                  type: string
-                kind:
-                  description: Kind of the referenced object.
+                fromFieldPath:
+                  description: FromFieldPath defaults to data.
                   type: string
                 name:
-                  description: Name of the referenced object.
+                  description: Name is unique across sources. It is the required resource
+                    key.
                   type: string
-                namespace:
-                  type: string
-                uid:
-                  description: UID of the referenced object.
+                ref:
+                  description: ResourceRef identifies one existing resource.
+                  properties:
+                    apiVersion:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      description: Namespace is empty for cluster scoped kinds such
+                        as EnvironmentConfig.
+                      type: string
+                  required:
+                  - apiVersion
+                  - kind
+                  - name
+                  type: object
+                resolution:
+                  description: Resolution says whether a source must exist.
+                  enum:
+                  - Required
+                  - Optional
                   type: string
               required:
-              - apiVersion
-              - kind
               - name
+              - ref
               type: object
+            minItems: 1
             type: array
-          targetRef:
-            description: SourceRef is a reference to a Kubernetes resource.
+          target:
+            description: Target specifies the resource to create.
             properties:
               apiVersion:
-                description: APIVersion of the referenced object.
-                type: string
-              extractFromKey:
-                type: string
-              key:
                 type: string
               kind:
-                description: Kind of the referenced object.
                 type: string
+              metadata:
+                description: |-
+                  TargetMetadata carries only what a merged resource needs. metav1.ObjectMeta
+                  would leak ownerReferences, finalizers and managedFields into the schema, and
+                  controller-gen renders it as an opaque object with no properties.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
               name:
-                description: Name of the referenced object.
+                type: string
+              nameFromCompositeFieldPath:
                 type: string
               namespace:
                 type: string
-              uid:
-                description: UID of the referenced object.
+              namespaceFromCompositeFieldPath:
+                type: string
+              toFieldPath:
+                description: ToFieldPath defaults to data.
                 type: string
             required:
             - apiVersion
             - kind
-            - name
             type: object
         required:
-        - sourceRefs
-        - targetRef
+        - sources
+        - target
         type: object
     served: true
     storage: true

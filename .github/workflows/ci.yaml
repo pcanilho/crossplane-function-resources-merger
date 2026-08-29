@@ -20,7 +20,7 @@ on:
         required: false
 
 env:
-  GO_VERSION: '1.25.14'
+  GO_VERSION: '1.27.0'
   GOLANGCI_VERSION: 'v2.13.2'
   KO_VERSION: 'v0.19.1'
 
@@ -66,19 +66,54 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      # internal/k8s talks to a real API server, so most test cases need a live
-      # cluster. Removable once sources are read via required resources.
-      - name: Create k8s Kind Cluster
-        uses: helm/kind-action@v1.14.0
-
-      - name: Prepare k8s Cluster
-        run: |
-          kubectl create namespace ephemeral
-          kubectl create cm map-1 -n ephemeral --from-literal=key1=a --from-literal=key2=a
-          kubectl create cm map-2 -n ephemeral --from-literal=key2=c --from-literal=key4=d
-
       - name: Run Unit Tests
         run: go test -v -cover ./...
+
+      - name: Setup the Crossplane CLI
+        run: curl -sfL https://cli.crossplane.io/install.sh | XP_VERSION=${{ env.XP_VERSION }} sh
+
+      - name: Validate function input
+        run: ./crossplane resource validate package/input example/composition.yaml --error-on-missing-schemas
+
+      - name: Render golden file
+        run: |
+          go run . --insecure &
+          FN_PID=$!
+
+          # go run keeps the compiled binary as a separate child process, so
+          # killing FN_PID alone can leave it holding the port. Kill whatever
+          # is actually listening on 9443 as the authoritative cleanup.
+          cleanup() {
+            kill "$FN_PID" 2>/dev/null || true
+            PORT_PIDS=$(lsof -ti :9443 2>/dev/null || true)
+            if [ -n "$PORT_PIDS" ]; then
+              kill -9 $PORT_PIDS 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+
+          for i in $(seq 1 30); do
+            if (exec 3<>/dev/tcp/127.0.0.1/9443) 2>/dev/null; then
+              exec 3<&- 3>&-
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "function did not start listening on :9443 in time" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # crossplane composition render still shells out to Docker to run
+          # the render engine itself; only the function call is local, per
+          # the render.crossplane.io/runtime: Development annotation.
+          ./crossplane composition render example/xr.yaml example/composition.yaml example/functions.yaml \
+            --xrd example/xrd.yaml \
+            --required-resources example/required-resources.yaml \
+            --crossplane-image xpkg.crossplane.io/crossplane/crossplane:v2.3.4 \
+            > rendered.yaml
+
+          diff -u example/rendered.golden.yaml rendered.yaml
 
   build:
     timeout-minutes: 10

@@ -1,11 +1,11 @@
 ---
-apiVersion: pkg.crossplane.io/v1beta1
+apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
-  name: function-xresources-merger
+  name: function-resources-merger
   annotations:
-#     This tells crossplane beta render to connect to the function locally.
+#     This tells crossplane composition render to connect to the function locally.
     render.crossplane.io/runtime: Development
 spec:
   # This is ignored when using the Development runtime.
-  package: function-xresources-merger
+  package: function-resources-merger

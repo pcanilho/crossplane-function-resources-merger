@@ -1,13 +1,7 @@
 ---
 apiVersion: resources-merger.fn.canilho.net/v1alpha1
-kind: xMerger
+kind: XMerger
 metadata:
   name: merger-results-xr
 spec:
-  mode: managed
-  options:
-    override: true
-    appendSlice: true
-    sliceDeepCopy: true
-  transform:
-    stringToMap: true
+  appName: merged
