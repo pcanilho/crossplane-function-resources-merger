@@ -71,6 +71,13 @@ type Source struct {
 
 	// FromFieldPath defaults to data.
 	FromFieldPath string `json:"fromFieldPath,omitempty"`
+
+	// AllowCrossNamespace permits this source to be read from a namespace other
+	// than the composite resource's own. The namespace must also appear in
+	// Input.AllowedSourceNamespaces. Only meaningful when the composite is
+	// namespaced; ignored when it is cluster scoped, where cross namespace
+	// reads are already the norm.
+	AllowCrossNamespace bool `json:"allowCrossNamespace,omitempty"`
 }
 
 // Input can be used to provide input to this Function.
@@ -92,6 +99,11 @@ type Input struct {
 	// ParseEmbedded decodes string values that are YAML mappings so their
 	// contents deep merge instead of being replaced wholesale.
 	ParseEmbedded bool `json:"parseEmbedded,omitempty"`
+
+	// AllowedSourceNamespaces lists the namespaces a source may be read from
+	// besides the composite resource's own, when that source also sets
+	// allowCrossNamespace. Ignored for a cluster scoped composite.
+	AllowedSourceNamespaces []string `json:"allowedSourceNamespaces,omitempty"`
 
 	Debug bool `json:"debug,omitempty"`
 }

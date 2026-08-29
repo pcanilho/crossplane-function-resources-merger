@@ -1,0 +1,59 @@
+---
+apiVersion: resources-merger.fn.canilho.net/v1alpha1
+kind: XNsMerger
+metadata:
+  name: merger-results-xr
+  namespace: team-a
+spec:
+  crossplane:
+    resourceRefs:
+    - apiVersion: v1
+      kind: ConfigMap
+      name: merged
+status:
+  conditions:
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    reason: WatchCircuitClosed
+    status: "True"
+    type: Responsive
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    message: '3 of 3 sources merged; cross-namespace: shared -> ConfigMap/shared-defaults
+      in platform'
+    reason: Success
+    status: "True"
+    type: Merged
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    reason: ReconcileSuccess
+    status: "True"
+    type: Synced
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    reason: Available
+    status: "True"
+    type: Ready
+---
+apiVersion: v1
+data:
+  app.yaml: |
+    database:
+      host: db.example.com
+      port: 5433
+    logLevel: info
+    retries: 3
+  owner: team-a
+  region: eu-west-1
+  tier: platform
+kind: ConfigMap
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: configmap/team-a/merged
+  labels:
+    crossplane.io/composite: merger-results-xr
+  name: merged
+  namespace: team-a
+  ownerReferences:
+  - apiVersion: resources-merger.fn.canilho.net/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: XNsMerger
+    name: merger-results-xr
+    uid: f2fb26da-cb10-5df6-b12b-f0e9827b0284

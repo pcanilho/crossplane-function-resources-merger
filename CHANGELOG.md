@@ -5,6 +5,52 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-29
+
+Namespaced composite resources are now supported. This is the default shape in
+Crossplane v2, so the function was previously unusable for most v2 consumers.
+
+Cluster-scoped consumers are unaffected by that work, but should read the first
+entry under Changed: a source whose field is absent no longer fails the
+composition.
+
+### Added
+
+- `sources[].allowCrossNamespace` and `allowedSourceNamespaces`, which together
+  permit a source to be read from a namespace other than the composite's own.
+  Both are required. Ignored for a cluster-scoped composite.
+
+### Changed
+
+- A source resource that exists but has no field at `fromFieldPath` no longer
+  fails the composition. It contributes nothing instead, under either
+  `resolution`. This affects every consumer, not only namespaced ones: a
+  Composition that fails today with `has no field` will start succeeding, with
+  one fewer source contributing. A field present but not an object, or any
+  other malformed `fromFieldPath`, is still fatal; only a genuinely absent
+  field is affected. `kubectl create configmap foo` produces exactly this
+  shape, so an empty `ConfigMap` can now be merged.
+- The `Merged` condition names an absent field under its own `no data: <name>`
+  clause, distinct from `skipped optional`, so a resource that was never there
+  and a resource that was there but empty stay tellable apart.
+- A namespaced composite is no longer rejected. Under one, `target.namespace` is
+  ignored, because Crossplane pins a composed resource to the composite's own
+  namespace regardless of what a function asks for. A warning is emitted and
+  the ignored value is noted on the `Merged` condition.
+- Under a namespaced composite, a source may only be read from the composite's
+  own namespace or from a cluster-scoped kind, unless both new fields permit it.
+  This is stricter than Crossplane, which does not confine reads at all.
+
+### Fixed
+
+- A `Secret` target whose `target.namespace` disagrees with a namespaced
+  composite is now a fatal error rather than a silent relocation of secret
+  material into the namespace the composite controls.
+- A cluster-scoped target such as `EnvironmentConfig` under a namespaced
+  composite now fails immediately, naming the target, instead of being created
+  and then orphaned. A cluster-scoped object owned by a namespaced composite can
+  never be garbage collected.
+
 ## [0.2.0] - 2026-08-29
 
 A full rewrite of the function as a pure composition function on Crossplane v2.
@@ -178,5 +224,6 @@ already there.
 
 See the [release notes](https://github.com/pcanilho/crossplane-function-resources-merger/releases/tag/v0.1.8).
 
+[0.3.0]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.1.8...v0.2.0
 [0.1.8]: https://github.com/pcanilho/crossplane-function-resources-merger/releases/tag/v0.1.8

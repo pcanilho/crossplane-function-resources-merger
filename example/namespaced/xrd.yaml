@@ -1,0 +1,26 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: xnsmergers.resources-merger.fn.canilho.net
+spec:
+  # The v2 default. Composed resources are pinned to this namespace.
+  scope: Namespaced
+  group: resources-merger.fn.canilho.net
+  names:
+    kind: XNsMerger
+    plural: xnsmergers
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                appName:
+                  type: string
+              required:
+                - appName

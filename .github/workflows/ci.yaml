@@ -30,7 +30,13 @@ env:
 
   # Pinned. Previously tracked the master channel, so every published package
   # was built by an unreleased nightly CLI.
+  #
+  # XP_VERSION and XP_CORE_VERSION version independently: XP_VERSION is the
+  # crossplane/cli release used by install.sh, XP_CORE_VERSION is the
+  # crossplane/crossplane core image used for --crossplane-image. Do not
+  # re-merge these into one var.
   XP_VERSION: 'v2.5.0'
+  XP_CORE_VERSION: 'v2.4.0'
 
   XPKG: ghcr.io/${{ github.repository }}
   # workflow_dispatch supplies the version explicitly; a v* tag push supplies
@@ -116,10 +122,20 @@ jobs:
           ./crossplane composition render example/xr.yaml example/composition.yaml example/functions.yaml \
             --xrd example/xrd.yaml \
             --required-resources example/required-resources.yaml \
-            --crossplane-image xpkg.crossplane.io/crossplane/crossplane:v2.3.4 \
+            --crossplane-image xpkg.crossplane.io/crossplane/crossplane:${{ env.XP_CORE_VERSION }} \
             > rendered.yaml
 
           diff -u example/rendered.golden.yaml rendered.yaml
+
+          # Render cannot exercise the scope gate: its in-memory client
+          # hardcodes IsObjectNamespaced. It does cover the merge and the key.
+          ./crossplane composition render example/namespaced/xr.yaml example/namespaced/composition.yaml example/namespaced/functions.yaml \
+            --xrd example/namespaced/xrd.yaml \
+            --required-resources example/namespaced/required-resources.yaml \
+            --crossplane-image xpkg.crossplane.io/crossplane/crossplane:${{ env.XP_CORE_VERSION }} \
+            > rendered-namespaced.yaml
+
+          diff -u example/namespaced/rendered.golden.yaml rendered-namespaced.yaml
 
   build:
     timeout-minutes: 10

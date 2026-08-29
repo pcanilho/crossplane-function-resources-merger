@@ -1,0 +1,8 @@
+---
+apiVersion: resources-merger.fn.canilho.net/v1alpha1
+kind: XNsMerger
+metadata:
+  name: merger-results-xr
+  namespace: team-a
+spec:
+  appName: merged

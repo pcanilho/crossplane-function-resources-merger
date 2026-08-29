@@ -41,6 +41,7 @@ const (
 	nsEphemeral     = "ephemeral"
 	nameMerged      = "merged"
 	mentionsSourceA = `source "a"`
+	mergedType      = "Merged"
 
 	// twoSourceInput merges two namespaced ConfigMaps into a third.
 	twoSourceInput = `{
@@ -67,6 +68,25 @@ const (
 		"apiVersion": "v1",
 		"kind": "ConfigMap",
 		"metadata": {"name": "map-1", "namespace": "platform"},
+		"data": {"shared": "from-a", "only-a": "1"}
+	}`
+
+	// nsXRInput places its source in the composite's own namespace so it stays
+	// valid once cross namespace source reads are confined. target.namespace
+	// deliberately disagrees with the composite, to exercise the ignore path.
+	nsXRInput = `{
+		"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+		"kind": "Input",
+		"target": {"apiVersion": "v1", "kind": "ConfigMap", "name": "merged", "namespace": "ephemeral"},
+		"sources": [
+			{"name": "a", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-1", "namespace": "team-a"}}
+		]
+	}`
+
+	sourceATeamA = `{
+		"apiVersion": "v1",
+		"kind": "ConfigMap",
+		"metadata": {"name": "map-1", "namespace": "team-a"},
 		"data": {"shared": "from-a", "only-a": "1"}
 	}`
 
@@ -113,7 +133,7 @@ func oneSourceRequirements() *fnv1.Requirements {
 // merge.
 func mergedCondition(msg string) []*fnv1.Condition {
 	return []*fnv1.Condition{{
-		Type:    "Merged",
+		Type:    mergedType,
 		Status:  fnv1.Status_STATUS_CONDITION_TRUE,
 		Reason:  "Success",
 		Target:  fnv1.Target_TARGET_COMPOSITE_AND_CLAIM.Enum(),
@@ -365,10 +385,79 @@ func TestRunFunction(t *testing.T) {
 			},
 			mentions: []string{mentionsSourceA, `"data"`},
 		},
-		"SourceDataAbsentIsFatalNotPanic": {
-			reason: "A source with no data field at all is fatal, naming the source and the path.",
-			args: args{ctx: context.Background(), req: req(oneSourceInput, map[string]*fnv1.Resources{
-				"a": items(`{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "map-1"}}`),
+		"AbsentFieldRequiredContributesNothing": {
+			reason: "A source that exists but has no field at fromFieldPath contributes nothing under Required: not fatal, not counted, but named in the condition under its own clause.",
+			args: args{ctx: context.Background(), req: req(`{
+				"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+				"kind": "Input",
+				"target": {"apiVersion": "v1", "kind": "ConfigMap", "name": "merged", "namespace": "ephemeral"},
+				"sources": [
+					{"name": "a", "resolution": "Required", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-1", "namespace": "platform"}}
+				]
+			}`, map[string]*fnv1.Resources{
+				"a": items(`{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "map-1", "namespace": "platform"}}`),
+			})},
+			want: want{
+				rsp: &fnv1.RunFunctionResponse{
+					Meta:         &fnv1.ResponseMeta{Tag: testTag, Ttl: durationpb.New(0)},
+					Requirements: oneSourceRequirements(),
+					Conditions:   mergedCondition("0 of 1 sources merged; no data: a"),
+					Desired: &fnv1.State{Resources: map[string]*fnv1.Resource{
+						mergedKey: {
+							Resource: resource.MustStructJSON(`{
+								"apiVersion": "v1",
+								"kind": "ConfigMap",
+								"metadata": {"name": "merged", "namespace": "ephemeral"},
+								"data": {}
+							}`),
+							Ready: fnv1.Ready_READY_TRUE,
+						},
+					}},
+				},
+			},
+		},
+		"AbsentFieldOptionalContributesNothing": {
+			reason: "resolution governs whether the resource must exist, not whether its field must be present: Optional behaves identically to Required for an absent field.",
+			args: args{ctx: context.Background(), req: req(`{
+				"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+				"kind": "Input",
+				"target": {"apiVersion": "v1", "kind": "ConfigMap", "name": "merged", "namespace": "ephemeral"},
+				"sources": [
+					{"name": "a", "resolution": "Optional", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-1", "namespace": "platform"}}
+				]
+			}`, map[string]*fnv1.Resources{
+				"a": items(`{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "map-1", "namespace": "platform"}}`),
+			})},
+			want: want{
+				rsp: &fnv1.RunFunctionResponse{
+					Meta:         &fnv1.ResponseMeta{Tag: testTag, Ttl: durationpb.New(0)},
+					Requirements: oneSourceRequirements(),
+					Conditions:   mergedCondition("0 of 1 sources merged; no data: a"),
+					Desired: &fnv1.State{Resources: map[string]*fnv1.Resource{
+						mergedKey: {
+							Resource: resource.MustStructJSON(`{
+								"apiVersion": "v1",
+								"kind": "ConfigMap",
+								"metadata": {"name": "merged", "namespace": "ephemeral"},
+								"data": {}
+							}`),
+							Ready: fnv1.Ready_READY_TRUE,
+						},
+					}},
+				},
+			},
+		},
+		"SourceDataStringIsFatalNotPanicUnderOptional": {
+			reason: "A type error is not absence: still fatal under Optional, proving resolution never softens it.",
+			args: args{ctx: context.Background(), req: req(`{
+				"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+				"kind": "Input",
+				"target": {"apiVersion": "v1", "kind": "ConfigMap", "name": "merged", "namespace": "ephemeral"},
+				"sources": [
+					{"name": "a", "resolution": "Optional", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-1", "namespace": "platform"}}
+				]
+			}`, map[string]*fnv1.Resources{
+				"a": items(`{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "map-1"}, "data": "not-an-object"}`),
 			})},
 			want: want{
 				rsp: &fnv1.RunFunctionResponse{
@@ -382,6 +471,54 @@ func TestRunFunction(t *testing.T) {
 			},
 			mentions: []string{mentionsSourceA, `"data"`},
 		},
+		"MalformedFromFieldPathIsFatalRequired": {
+			reason: "A malformed fromFieldPath fails to parse, so fieldpath.IsNotFound is false: fatal under Required, proving discrimination is on IsNotFound, not on err != nil.",
+			args: args{ctx: context.Background(), req: req(`{
+				"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+				"kind": "Input",
+				"target": {"apiVersion": "v1", "kind": "ConfigMap", "name": "merged", "namespace": "ephemeral"},
+				"sources": [
+					{"name": "a", "resolution": "Required", "fromFieldPath": "data..bad", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-1", "namespace": "platform"}}
+				]
+			}`, map[string]*fnv1.Resources{
+				"a": items(sourceA),
+			})},
+			want: want{
+				rsp: &fnv1.RunFunctionResponse{
+					Meta:         &fnv1.ResponseMeta{Tag: testTag, Ttl: durationpb.New(0)},
+					Requirements: oneSourceRequirements(),
+					Results: []*fnv1.Result{{
+						Severity: fnv1.Severity_SEVERITY_FATAL,
+						Target:   fnv1.Target_TARGET_COMPOSITE.Enum(),
+					}},
+				},
+			},
+			mentions: []string{mentionsSourceA, "data..bad"},
+		},
+		"MalformedFromFieldPathIsFatalOptional": {
+			reason: "Same malformed path under Optional: still fatal, proving the same discrimination holds regardless of resolution.",
+			args: args{ctx: context.Background(), req: req(`{
+				"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+				"kind": "Input",
+				"target": {"apiVersion": "v1", "kind": "ConfigMap", "name": "merged", "namespace": "ephemeral"},
+				"sources": [
+					{"name": "a", "resolution": "Optional", "fromFieldPath": "data..bad", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-1", "namespace": "platform"}}
+				]
+			}`, map[string]*fnv1.Resources{
+				"a": items(sourceA),
+			})},
+			want: want{
+				rsp: &fnv1.RunFunctionResponse{
+					Meta:         &fnv1.ResponseMeta{Tag: testTag, Ttl: durationpb.New(0)},
+					Requirements: oneSourceRequirements(),
+					Results: []*fnv1.Result{{
+						Severity: fnv1.Severity_SEVERITY_FATAL,
+						Target:   fnv1.Target_TARGET_COMPOSITE.Enum(),
+					}},
+				},
+			},
+			mentions: []string{mentionsSourceA, "data..bad"},
+		},
 		"SecretSourceIntoConfigMapTargetIsFatal": {
 			reason: "Secret data is base64, so merging it into a ConfigMap would emit garbage and leak the secret in plaintext.",
 			args: args{ctx: context.Background(), req: req(`{
@@ -394,6 +531,20 @@ func TestRunFunction(t *testing.T) {
 			}`, nil)},
 			want:     want{rsp: fatal()},
 			mentions: []string{mentionsSourceA, "Secret"},
+		},
+		"AllowedSourceNamespacesRejectsEmptyString": {
+			reason: "An empty string cannot name a real namespace and reads as a typo for one, so it is rejected outright rather than silently matching nothing.",
+			args: args{ctx: context.Background(), req: req(`{
+				"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+				"kind": "Input",
+				"target": {"apiVersion": "v1", "kind": "ConfigMap", "name": "merged", "namespace": "ephemeral"},
+				"allowedSourceNamespaces": [""],
+				"sources": [
+					{"name": "a", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-1", "namespace": "platform"}}
+				]
+			}`, nil)},
+			want:     want{rsp: fatal()},
+			mentions: []string{"allowedSourceNamespaces", "empty namespace"},
 		},
 		"TargetMetadataLandsOnTheComposedResource": {
 			reason: "target.metadata carries labels and annotations onto the merged resource.",
@@ -806,35 +957,6 @@ func TestRunFunction(t *testing.T) {
 			want:     want{rsp: fatal()},
 			mentions: []string{"target.apiVersion"},
 		},
-		"NamespacedXRIsFatal": {
-			reason: "A namespaced consumer XR would otherwise fail later inside Crossplane naming the composed resource, not target.namespace.",
-			args: args{
-				ctx: context.Background(),
-				req: &fnv1.RunFunctionRequest{
-					Meta: &fnv1.RequestMeta{Tag: testTag},
-					Observed: &fnv1.State{Composite: &fnv1.Resource{
-						Resource: resource.MustStructJSON(`{
-							"apiVersion": "example.org/v1",
-							"kind": "XMerger",
-							"metadata": {"name": "merger-xr", "namespace": "team-a"}
-						}`),
-					}},
-					Input:             resource.MustStructJSON(oneSourceInput),
-					RequiredResources: map[string]*fnv1.Resources{"a": items(sourceA)},
-				},
-			},
-			want: want{
-				rsp: &fnv1.RunFunctionResponse{
-					Meta:         &fnv1.ResponseMeta{Tag: testTag, Ttl: durationpb.New(0)},
-					Requirements: oneSourceRequirements(),
-					Results: []*fnv1.Result{{
-						Severity: fnv1.Severity_SEVERITY_FATAL,
-						Target:   fnv1.Target_TARGET_COMPOSITE.Enum(),
-					}},
-				},
-			},
-			mentions: []string{"target.namespace"},
-		},
 		"SecretTargetWritesBase64Data": {
 			reason: "Server side apply never persists stringData, so a Secret target must write data with values base64 encoded.",
 			args: args{ctx: context.Background(), req: req(`{
@@ -1000,6 +1122,19 @@ func clusterScopedRequirements() *fnv1.Requirements {
 func resultsMention(rsp *fnv1.RunFunctionResponse, substr string) bool {
 	for _, r := range rsp.GetResults() {
 		if strings.Contains(r.GetMessage(), substr) {
+			return true
+		}
+	}
+	return false
+}
+
+// fatalResultMentions reports whether rsp carries a Fatal result whose message
+// contains substr. resultsMention alone cannot tell a Fatal from a Warning
+// with the same wording, which is exactly the reversal a mutation of
+// response.Fatal to response.Warning would produce.
+func fatalResultMentions(rsp *fnv1.RunFunctionResponse, substr string) bool {
+	for _, r := range rsp.GetResults() {
+		if r.GetSeverity() == fnv1.Severity_SEVERITY_FATAL && strings.Contains(r.GetMessage(), substr) {
 			return true
 		}
 	}
@@ -1371,7 +1506,7 @@ func TestSetsMergedConditionNamingSkippedOptionalSources(t *testing.T) {
 
 	var found bool
 	for _, c := range rsp.GetConditions() {
-		if c.GetType() != "Merged" {
+		if c.GetType() != mergedType {
 			continue
 		}
 		found = true
@@ -1381,5 +1516,437 @@ func TestSetsMergedConditionNamingSkippedOptionalSources(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("no Merged condition in %v", rsp.GetConditions())
+	}
+}
+
+// TestMergedConditionDistinguishesAbsentResourceFromAbsentField proves the two
+// clauses are separate and ordered: skipped optional (the resource does not
+// exist) before no data (the resource exists but its field does not),
+// matching mergedMessage's fixed clause order.
+func TestMergedConditionDistinguishesAbsentResourceFromAbsentField(t *testing.T) {
+	f := &Function{log: logging.NewNopLogger()}
+
+	rsp, err := f.RunFunction(context.Background(), req(`{
+		"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+		"kind": "Input",
+		"target": {"apiVersion": "v1", "kind": "ConfigMap", "name": "merged", "namespace": "ephemeral"},
+		"sources": [
+			{"name": "a", "resolution": "Optional", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-1", "namespace": "platform"}},
+			{"name": "b", "resolution": "Optional", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-2", "namespace": "platform"}},
+			{"name": "c", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-3", "namespace": "platform"}}
+		]
+	}`, map[string]*fnv1.Resources{
+		"a": items(),
+		"b": items(`{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "map-2", "namespace": "platform"}}`),
+		"c": items(sourceA),
+	}))
+	if err != nil {
+		t.Fatalf("f.RunFunction(...): %v", err)
+	}
+
+	var msg string
+	var found bool
+	for _, c := range rsp.GetConditions() {
+		if c.GetType() != mergedType {
+			continue
+		}
+		found = true
+		msg = c.GetMessage()
+	}
+	if !found {
+		t.Fatalf("no Merged condition in %v", rsp.GetConditions())
+	}
+
+	skippedAt := strings.Index(msg, "skipped optional: a")
+	noDataAt := strings.Index(msg, "no data: b")
+	if skippedAt == -1 || noDataAt == -1 {
+		t.Fatalf("Merged condition message %q does not name both an absent resource and an absent field, distinctly", msg)
+	}
+	if skippedAt > noDataAt {
+		t.Errorf("Merged condition message %q orders \"no data\" before \"skipped optional\", want the reverse", msg)
+	}
+	if want := "1 of 3 sources merged"; !strings.HasPrefix(msg, want) {
+		t.Errorf("Merged condition message %q does not start with %q; only source %q actually contributed", msg, want, "c")
+	}
+}
+
+// TestObservedCompositeIsReadBeforeRequirements pins the ordering the
+// confinement guard depends on. The guard needs the XR's namespace while it is
+// still building requirements, so a missing composite must surface before any
+// requirement is returned.
+func TestObservedCompositeIsReadBeforeRequirements(t *testing.T) {
+	f := &Function{log: logging.NewNopLogger()}
+
+	r := req(oneSourceInput, nil)
+	r.Observed = &fnv1.State{Composite: &fnv1.Resource{
+		Resource: resource.MustStructJSON(`{
+			"apiVersion": "example.org/v1",
+			"kind": "XMerger",
+			"metadata": {"name": "merger-xr"}
+		}`),
+	}}
+
+	rsp, err := f.RunFunction(context.Background(), r)
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+	if rsp.GetRequirements() == nil {
+		t.Fatal("RunFunction() returned no requirements for a cluster scoped composite")
+	}
+	if got := len(rsp.GetRequirements().GetResources()); got != 1 {
+		t.Errorf("requirements = %d resources, want 1", got)
+	}
+}
+
+// TestNamespacedCompositeComposesWithoutANamespace is the core of Release 2.
+// Leaving the composed resource's namespace empty is what arms Crossplane's own
+// IsObjectNamespaced check, which is gated on that field being empty. Setting it
+// lets a cluster scoped target be created and then permanently orphaned.
+func TestNamespacedCompositeComposesWithoutANamespace(t *testing.T) {
+	f := &Function{log: logging.NewNopLogger()}
+
+	r := req(nsXRInput, map[string]*fnv1.Resources{"a": items(sourceATeamA)})
+	r.Observed = &fnv1.State{Composite: &fnv1.Resource{
+		Resource: resource.MustStructJSON(`{
+			"apiVersion": "example.org/v1",
+			"kind": "XMerger",
+			"metadata": {"name": "merger-xr", "namespace": "team-a"}
+		}`),
+	}}
+
+	rsp, err := f.RunFunction(context.Background(), r)
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+
+	desired := rsp.GetDesired().GetResources()
+	if len(desired) != 1 {
+		t.Fatalf("desired = %d resources, want 1", len(desired))
+	}
+
+	// The key uses the XR's namespace, because that is where Crossplane will
+	// put the object.
+	const wantKey = "configmap/team-a/merged"
+	cd, ok := desired[wantKey]
+	if !ok {
+		t.Fatalf("desired keys = %v, want %q", keys(rsp), wantKey)
+	}
+
+	// The resource itself must carry no namespace.
+	fields := cd.GetResource().GetFields()
+	meta, ok := fields["metadata"]
+	if !ok {
+		t.Fatal("composed resource has no metadata")
+	}
+	if ns, ok := meta.GetStructValue().GetFields()["namespace"]; ok {
+		t.Errorf("composed resource namespace = %q, want it unset", ns.GetStringValue())
+	}
+}
+
+// TestNamespacedTargetNamespaceFieldPathResolvingToEmptyIsNotFatal is the
+// namespaced half of NamespaceFieldPathResolvingToEmptyIsFatal. Under a
+// namespaced composite the resolved value is discarded in favour of the XR's
+// own namespace, so an empty resolution is harmless there, unlike under a
+// cluster scoped composite where it would silently drop the namespace.
+func TestNamespacedTargetNamespaceFieldPathResolvingToEmptyIsNotFatal(t *testing.T) {
+	r := &fnv1.RunFunctionRequest{
+		Meta: &fnv1.RequestMeta{Tag: testTag},
+		Observed: &fnv1.State{Composite: &fnv1.Resource{
+			Resource: resource.MustStructJSON(`{
+				"apiVersion": "example.org/v1",
+				"kind": "XMerger",
+				"metadata": {"name": "merger-xr", "namespace": "team-a"},
+				"spec": {"targetNamespace": ""}
+			}`),
+		}},
+		Input: resource.MustStructJSON(`{
+			"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+			"kind": "Input",
+			"target": {"apiVersion": "v1", "kind": "ConfigMap", "name": "merged", "namespaceFromCompositeFieldPath": "spec.targetNamespace"},
+			"sources": [
+				{"name": "a", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-1", "namespace": "team-a"}}
+			]
+		}`),
+		RequiredResources: map[string]*fnv1.Resources{
+			"a": items(sourceATeamA),
+		},
+	}
+
+	f := &Function{log: logging.NewNopLogger()}
+	rsp, err := f.RunFunction(context.Background(), r)
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+	for _, res := range rsp.GetResults() {
+		if res.GetSeverity() == fnv1.Severity_SEVERITY_FATAL {
+			t.Fatalf("an empty namespaceFromCompositeFieldPath resolution must not fatal under a namespaced composite: %v", rsp.GetResults())
+		}
+	}
+
+	const wantKey = "configmap/team-a/merged"
+	if _, ok := rsp.GetDesired().GetResources()[wantKey]; !ok {
+		t.Errorf("desired keys = %v, want %q", keys(rsp), wantKey)
+	}
+}
+
+// TestNamespacedCompositeIgnoresTargetNamespace covers a ConfigMap target whose
+// target.namespace disagrees with the XR. Crossplane clamps it either way, so
+// the function warns rather than failing.
+func TestNamespacedCompositeIgnoresTargetNamespace(t *testing.T) {
+	f := &Function{log: logging.NewNopLogger()}
+
+	r := req(nsXRInput, map[string]*fnv1.Resources{"a": items(sourceATeamA)})
+	r.Observed = &fnv1.State{Composite: &fnv1.Resource{
+		Resource: resource.MustStructJSON(`{
+			"apiVersion": "example.org/v1",
+			"kind": "XMerger",
+			"metadata": {"name": "merger-xr", "namespace": "team-a"}
+		}`),
+	}}
+
+	rsp, err := f.RunFunction(context.Background(), r)
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+	if !resultsMention(rsp, "is ignored") {
+		t.Errorf("results did not warn about the ignored target.namespace: %v", rsp.GetResults())
+	}
+
+	// The Warning result is transient; the Merged condition is the persisted
+	// surface, so the same note must also land there.
+	var found bool
+	for _, c := range rsp.GetConditions() {
+		if c.GetType() != mergedType {
+			continue
+		}
+		found = true
+		const want = `ignored target.namespace: "ephemeral", using "team-a"`
+		if !strings.Contains(c.GetMessage(), want) {
+			t.Errorf("Merged condition message %q does not record %q", c.GetMessage(), want)
+		}
+	}
+	if !found {
+		t.Fatalf("no Merged condition in %v", rsp.GetConditions())
+	}
+}
+
+// crossNsInput reads a source from "platform" while the composite lives
+// elsewhere. The target namespace matches the XR so only the source is at issue.
+const crossNsInput = `{
+	"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+	"kind": "Input",
+	"target": {"apiVersion": "v1", "kind": "ConfigMap", "name": "merged", "namespace": "team-a"},
+	"sources": [
+		{"name": "a", "ref": {"apiVersion": "v1", "kind": "ConfigMap", "name": "map-1", "namespace": "platform"}}
+	]
+}`
+
+func namespacedXR(input string, required map[string]*fnv1.Resources) *fnv1.RunFunctionRequest {
+	r := req(input, required)
+	r.Observed = &fnv1.State{Composite: &fnv1.Resource{
+		Resource: resource.MustStructJSON(`{
+			"apiVersion": "example.org/v1",
+			"kind": "XMerger",
+			"metadata": {"name": "merger-xr", "namespace": "team-a"}
+		}`),
+	}}
+	return r
+}
+
+// TestCrossNamespaceSourceIsRejectedAndNotRequested is the security case. The
+// selector must be absent from the requirements, not merely unmerged: a
+// returned selector is a fetch Crossplane will perform.
+func TestCrossNamespaceSourceIsRejectedAndNotRequested(t *testing.T) {
+	f := &Function{log: logging.NewNopLogger()}
+
+	rsp, err := f.RunFunction(context.Background(), namespacedXR(crossNsInput, nil))
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+	if !resultsMention(rsp, "allowCrossNamespace") {
+		t.Errorf("results did not name the remedy: %v", rsp.GetResults())
+	}
+	if _, ok := rsp.GetRequirements().GetResources()["a"]; ok {
+		t.Error("the disallowed selector was returned; Crossplane would fetch it")
+	}
+}
+
+// TestCrossNamespaceSourceNeedsBothControls proves the flag alone is not
+// enough. A boolean cannot pin which namespace is trusted.
+func TestCrossNamespaceSourceNeedsBothControls(t *testing.T) {
+	flagOnly := strings.Replace(crossNsInput,
+		`"namespace": "platform"}}`,
+		`"namespace": "platform"}, "allowCrossNamespace": true}`, 1)
+
+	f := &Function{log: logging.NewNopLogger()}
+	rsp, err := f.RunFunction(context.Background(), namespacedXR(flagOnly, nil))
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+	if !resultsMention(rsp, "allowedSourceNamespaces") {
+		t.Errorf("results did not name the missing allow list: %v", rsp.GetResults())
+	}
+	if _, ok := rsp.GetRequirements().GetResources()["a"]; ok {
+		t.Error("the selector was returned despite the namespace not being listed")
+	}
+}
+
+// TestCrossNamespaceSourceAllowedWhenBothSet is the permitted path.
+func TestCrossNamespaceSourceAllowedWhenBothSet(t *testing.T) {
+	allowed := strings.Replace(crossNsInput,
+		`"namespace": "platform"}}`,
+		`"namespace": "platform"}, "allowCrossNamespace": true}`, 1)
+	allowed = strings.Replace(allowed,
+		`"sources": [`,
+		`"allowedSourceNamespaces": ["platform"], "sources": [`, 1)
+
+	f := &Function{log: logging.NewNopLogger()}
+	rsp, err := f.RunFunction(context.Background(), namespacedXR(allowed, nil))
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+	if _, ok := rsp.GetRequirements().GetResources()["a"]; !ok {
+		t.Fatalf("the permitted selector was not returned: %v", rsp.GetRequirements())
+	}
+}
+
+// TestMergedConditionRecordsPermittedCrossNamespaceRead is the audit trail: a
+// permitted cross-namespace read must be recorded on the Merged condition, not
+// pass silently, so an operator can see which Compositions reach outside their
+// namespace.
+func TestMergedConditionRecordsPermittedCrossNamespaceRead(t *testing.T) {
+	allowed := strings.Replace(crossNsInput,
+		`"namespace": "platform"}}`,
+		`"namespace": "platform"}, "allowCrossNamespace": true}`, 1)
+	allowed = strings.Replace(allowed,
+		`"sources": [`,
+		`"allowedSourceNamespaces": ["platform"], "sources": [`, 1)
+
+	f := &Function{log: logging.NewNopLogger()}
+	rsp, err := f.RunFunction(context.Background(), namespacedXR(allowed, map[string]*fnv1.Resources{
+		"a": items(sourceA),
+	}))
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+
+	var found bool
+	for _, c := range rsp.GetConditions() {
+		if c.GetType() != mergedType {
+			continue
+		}
+		found = true
+		// Both the source's Composition-local name and the real object it read
+		// must appear; naming only the local alias is not an audit trail.
+		const want = "cross-namespace: a -> ConfigMap/map-1 in platform"
+		if !strings.Contains(c.GetMessage(), want) {
+			t.Errorf("Merged condition message %q does not record the permitted cross-namespace read %q", c.GetMessage(), want)
+		}
+	}
+	if !found {
+		t.Fatalf("no Merged condition in %v", rsp.GetConditions())
+	}
+}
+
+// TestClusterScopedCompositeIsUnconfined pins that Release 1 behaviour is
+// untouched. There is no observed composite namespace here.
+func TestClusterScopedCompositeIsUnconfined(t *testing.T) {
+	f := &Function{log: logging.NewNopLogger()}
+
+	rsp, err := f.RunFunction(context.Background(), req(crossNsInput, nil))
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+	if _, ok := rsp.GetRequirements().GetResources()["a"]; !ok {
+		t.Error("a cluster scoped composite must not be confined")
+	}
+}
+
+// TestAllowCrossNamespaceOnClusterScopedKindWarns covers the no-op case. An
+// empty ref.namespace already means a cluster scoped kind, so the flag does
+// nothing and the author should be told.
+func TestAllowCrossNamespaceOnClusterScopedKindWarns(t *testing.T) {
+	const input = `{
+		"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+		"kind": "Input",
+		"target": {"apiVersion": "v1", "kind": "ConfigMap", "name": "merged", "namespace": "team-a"},
+		"sources": [
+			{"name": "a", "allowCrossNamespace": true, "ref": {"apiVersion": "apiextensions.crossplane.io/v1beta1", "kind": "EnvironmentConfig", "name": "env-1"}}
+		]
+	}`
+
+	f := &Function{log: logging.NewNopLogger()}
+	rsp, err := f.RunFunction(context.Background(), namespacedXR(input, nil))
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+	if !resultsMention(rsp, "has no effect") {
+		t.Errorf("results did not warn about the no-op flag: %v", rsp.GetResults())
+	}
+	if _, ok := rsp.GetRequirements().GetResources()["a"]; !ok {
+		t.Error("a cluster scoped source must still be requested")
+	}
+}
+
+// TestNamespacedCompositeRejectsClusterScopedTarget fails fast rather than
+// letting Crossplane reject it several reconciles later.
+func TestNamespacedCompositeRejectsClusterScopedTarget(t *testing.T) {
+	const input = `{
+		"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+		"kind": "Input",
+		"target": {"apiVersion": "apiextensions.crossplane.io/v1beta1", "kind": "EnvironmentConfig", "name": "merged"},
+		"sources": [
+			{"name": "a", "ref": {"apiVersion": "apiextensions.crossplane.io/v1beta1", "kind": "EnvironmentConfig", "name": "env-1"}}
+		]
+	}`
+
+	f := &Function{log: logging.NewNopLogger()}
+	rsp, err := f.RunFunction(context.Background(), namespacedXR(input, nil))
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+	if !fatalResultMentions(rsp, "cluster scoped") {
+		t.Errorf("no fatal result rejecting the cluster scoped target: %v", rsp.GetResults())
+	}
+	if got := len(rsp.GetDesired().GetResources()); got != 0 {
+		t.Errorf("desired resources = %d, want 0 for a rejected cluster scoped target", got)
+	}
+}
+
+// TestClusterScopedTargetMatchesOnGroupKind proves the check is not kind only.
+// A user's own namespaced EnvironmentConfig in another group is legitimate and
+// must not be rejected.
+func TestClusterScopedTargetMatchesOnGroupKind(t *testing.T) {
+	if isClusterScopedTarget(schema.GroupKind{Group: "mygroup.io", Kind: "EnvironmentConfig"}) {
+		t.Error("mygroup.io/EnvironmentConfig was treated as cluster scoped")
+	}
+	if !isClusterScopedTarget(schema.GroupKind{Group: "apiextensions.crossplane.io", Kind: "EnvironmentConfig"}) {
+		t.Error("the Crossplane EnvironmentConfig was not treated as cluster scoped")
+	}
+}
+
+// TestNamespacedCompositeRejectsMisdirectedSecret. Relocating a Secret the
+// author placed elsewhere moves secret material into the namespace the tenant
+// controls, so this is fatal where a ConfigMap only warns.
+func TestNamespacedCompositeRejectsMisdirectedSecret(t *testing.T) {
+	const input = `{
+		"apiVersion": "resources-merger.fn.canilho.net/v1alpha2",
+		"kind": "Input",
+		"target": {"apiVersion": "v1", "kind": "Secret", "name": "merged", "namespace": "vault-secrets"},
+		"sources": [
+			{"name": "a", "ref": {"apiVersion": "v1", "kind": "Secret", "name": "src", "namespace": "team-a"}}
+		]
+	}`
+
+	f := &Function{log: logging.NewNopLogger()}
+	rsp, err := f.RunFunction(context.Background(), namespacedXR(input, nil))
+	if err != nil {
+		t.Fatalf("RunFunction() error = %v, want nil", err)
+	}
+	if !fatalResultMentions(rsp, "relocate") {
+		t.Errorf("no fatal result rejecting the misdirected Secret: %v", rsp.GetResults())
+	}
+	if got := len(rsp.GetDesired().GetResources()); got != 0 {
+		t.Errorf("desired resources = %d, want 0 for a rejected misdirected Secret", got)
 	}
 }

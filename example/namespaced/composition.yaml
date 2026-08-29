@@ -1,0 +1,48 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: function-resources-merger-namespaced
+spec:
+  compositeTypeRef:
+    apiVersion: resources-merger.fn.canilho.net/v1alpha1
+    kind: XNsMerger
+  mode: Pipeline
+  pipeline:
+  - step: run
+    functionRef:
+      name: function-resources-merger
+    input:
+      apiVersion: resources-merger.fn.canilho.net/v1alpha2
+      kind: Input
+      mergeStrategy: ForceMergeObjects
+      parseEmbedded: true
+      # Trusted namespaces. A source also needs allowCrossNamespace.
+      allowedSourceNamespaces:
+        - platform
+      target:
+        apiVersion: v1
+        kind: ConfigMap
+        nameFromCompositeFieldPath: spec.appName
+        # No namespace: Crossplane pins the target to the composite's own.
+      sources:
+        # Same namespace as the composite. No opt-in needed.
+        - name: map-1
+          ref:
+            apiVersion: v1
+            kind: ConfigMap
+            namespace: team-a
+            name: map-1
+        # Another namespace. Needs both controls.
+        - name: shared
+          allowCrossNamespace: true
+          ref:
+            apiVersion: v1
+            kind: ConfigMap
+            namespace: platform
+            name: shared-defaults
+        # Cluster scoped. Always readable, no namespace to declare.
+        - name: envcfg-1
+          ref:
+            apiVersion: apiextensions.crossplane.io/v1beta1
+            kind: EnvironmentConfig
+            name: envcfg-1

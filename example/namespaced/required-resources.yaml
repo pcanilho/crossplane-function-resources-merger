@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: map-1
+  namespace: team-a
+data:
+  app.yaml: |
+    database:
+      host: db.example.com
+      port: 5432
+    logLevel: info
+  owner: team-a
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shared-defaults
+  namespace: platform
+data:
+  app.yaml: |
+    database:
+      port: 5433
+    retries: 3
+  tier: platform
+---
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: envcfg-1
+data:
+  region: eu-west-1

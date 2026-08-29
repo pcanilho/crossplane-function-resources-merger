@@ -26,10 +26,11 @@ It supports any kind of resource.
 ## Installing this function
 
 > [!NOTE]
-> This function reads and writes resources using Crossplane's own `ServiceAccount`, not a dedicated
-> `DeploymentRuntimeConfig`. Its default `ClusterRole` covers `ConfigMap`s, `Secret`s and
-> `apiextensions.crossplane.io` resources. To target an arbitrary CRD, grant it a `ClusterRole` labelled
-> `rbac.crossplane.io/aggregate-to-crossplane: "true"`.
+> This function needs no RBAC. It never contacts the API server: Crossplane resolves the sources and
+> applies the result under its own `ServiceAccount`. Crossplane's default `ClusterRole` covers
+> `ConfigMap`s, `Secret`s and `apiextensions.crossplane.io` resources. To target an arbitrary CRD, grant
+> Crossplane a `ClusterRole` labelled `rbac.crossplane.io/aggregate-to-crossplane: "true"`.
+> A `DeploymentRuntimeConfig` still applies, for replicas, resource limits and node placement.
 
 * Install using `kubectl`:
 
@@ -62,9 +63,6 @@ crossplane:
       - ghcr.io/pcanilho/crossplane-function-resources-merger:v0.2.0
 ```
 
-The above Helm chart will install the `pcanilho-crossplane-function-resources-merger` function into the Crossplane
-runtime.
-
 ## How-to-use
 
 ### Function `Input` specification
@@ -87,7 +85,7 @@ Specifies the target resource that will be created/managed by this function.
 
 | Field                              | Description                                                                                  |
 |-------------------------------------|------------------------------------------------------------------------------------------------|
-| `namespace`                         | The namespace where the target resource will be created/managed. Omit for cluster-scoped kinds. |
+| `namespace`                         | The namespace where the target resource will be created/managed. Omit for cluster-scoped kinds. Ignored under a namespaced composite, which pins the target to its own namespace. |
 | `namespaceFromCompositeFieldPath`   | (Optional) A field path on the composite resource to resolve the namespace from.                |
 | `name`                              | The target resource's `metadata.name`. The `crossplane.io/composition-resource-name` annotation is derived from the resource's identity, not this value; see the worked example below.     |
 | `nameFromCompositeFieldPath`        | (Optional) A field path on the composite resource to resolve the name from.                     |
@@ -104,8 +102,20 @@ Specifies the target resource that will be created/managed by this function.
 > same kind does not recreate it, since the target is identified by group and kind only.
 
 > [!NOTE]
-> A namespaced consumer XR is unsupported: the function returns a fatal error naming
-> `target.namespace`, since the target requires a cluster-scoped composite resource.
+> Under a namespaced composite resource, Crossplane pins the target to the composite's own
+> namespace, so `target.namespace` is ignored: a warning is emitted and the ignored value is
+> noted on the `Merged` condition.
+> A `Secret` target whose `target.namespace` disagrees is a fatal error rather than a warning,
+> since relocating secret material is not a safe thing to do quietly. A cluster-scoped target such
+> as `EnvironmentConfig` cannot be composed by a namespaced composite at all.
+
+> [!IMPORTANT]
+> Under a namespaced composite, a source may only be read from the composite's own namespace, or
+> from a cluster-scoped kind. Reading another namespace requires both `allowCrossNamespace` on the
+> source and that namespace in `allowedSourceNamespaces`. This is defence in depth against
+> mistakes: Crossplane itself does not confine reads, and they run under its own cluster-wide
+> `ServiceAccount`. It is not a tenant isolation boundary, since Compositions are cluster-scoped
+> and only platform operators can write them.
 
 <details>
     <summary><i><b>sources</b> [expand]</i></summary>
@@ -119,7 +129,19 @@ A list of resources that will be used to merge into the target resource.
 | `name`           | A unique key identifying this source.                                           |
 | `ref`            | The `apiVersion`, `kind` and `name` of the resource, plus its `namespace`. Omit `namespace` for cluster-scoped kinds such as `EnvironmentConfig`. |
 | `resolution`     | (Optional) `Required` or `Optional`. (defaults to `Required`)                   |
-| `fromFieldPath`  | (Optional) The field to read data from. (defaults to `data`)                    |
+| `fromFieldPath`  | (Optional) The field to read data from. (defaults to `data`) If absent on an otherwise existing resource, the source contributes nothing rather than failing. |
+| `allowCrossNamespace` | (Optional) Permits this source to be read from a namespace other than the composite's. The namespace must also appear in `allowedSourceNamespaces`. Ignored for a cluster-scoped composite. |
+
+</details>
+
+<details>
+    <summary><i><b>allowedSourceNamespaces</b> [expand]</i></summary>
+
+`Optional`
+
+The namespaces a source may be read from besides the composite's own, when that source also sets
+`allowCrossNamespace`. Both are required: the flag says which sources may cross a namespace, the
+list says which namespaces are trusted. Ignored for a cluster-scoped composite.
 
 </details>
 
@@ -376,12 +398,19 @@ spec:
     ```shell
       go run . --insecure --debug
     ```
-2. Render the example:
+2. Render the cluster scoped example:
     ```shell
     cd example && crossplane composition render xr.yaml composition.yaml functions.yaml \
       --xrd xrd.yaml \
       --required-resources required-resources.yaml \
-      --crossplane-image xpkg.crossplane.io/crossplane/crossplane:v2.3.4
+      --crossplane-image xpkg.crossplane.io/crossplane/crossplane:v2.4.0
+    ```
+3. Or the namespaced example:
+    ```shell
+    cd example/namespaced && crossplane composition render xr.yaml composition.yaml functions.yaml \
+      --xrd xrd.yaml \
+      --required-resources required-resources.yaml \
+      --crossplane-image xpkg.crossplane.io/crossplane/crossplane:v2.4.0
     ```
 
 ##### References
