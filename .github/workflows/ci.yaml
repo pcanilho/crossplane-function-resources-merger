@@ -12,6 +12,10 @@ on:
     branches:
       - main
       - release-*
+    # Path filters are not evaluated for tag pushes, so paths-ignore above
+    # cannot suppress a release.
+    tags:
+      - v*
   pull_request: {}
   workflow_dispatch:
     inputs:
@@ -29,7 +33,9 @@ env:
   XP_VERSION: 'v2.5.0'
 
   XPKG: ghcr.io/${{ github.repository }}
-  XPKG_VERSION: ${{ inputs.version }}
+  # workflow_dispatch supplies the version explicitly; a v* tag push supplies
+  # its own name. Empty on a branch push, which selects the v0.0.0- fallback.
+  XPKG_VERSION: ${{ inputs.version || (github.ref_type == 'tag' && github.ref_name) || '' }}
 
 jobs:
   lint:
