@@ -21,43 +21,29 @@ It supports any kind of resource.
 
 ## Requirements
 
-* `crossplane` ≥ v1.15 (recommended)
+* `crossplane` ≥ v2.0.0
 
 ## Installing this function
 
-> [!IMPORTANT]
-> It is recommended that this function is created with a custom `DeploymentRuntimeConfig` as to allow
-> for the function to have the necessary permissions to get/update/create resources.
+> [!NOTE]
+> This function reads and writes resources using Crossplane's own `ServiceAccount`, not a dedicated
+> `DeploymentRuntimeConfig`. Its default `ClusterRole` covers `ConfigMap`s, `Secret`s and
+> `apiextensions.crossplane.io` resources. To target an arbitrary CRD, grant it a `ClusterRole` labelled
+> `rbac.crossplane.io/aggregate-to-crossplane: "true"`.
 
 * Install using `kubectl`:
 
 ```shell
 cat <<EOF | kubectl apply -f -
 ---
-apiVersion: pkg.crossplane.io/v1beta1
+apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
-  name: function-xresources-merger
+  name: function-resources-merger
 spec:
   package: ghcr.io/pcanilho/crossplane-function-resources-merger:v0.1.8
 EOF
 ```
-
-> [!TIP]
-> If different permissions are to be granted to the function, a `(Cluster)Role` and `(Cluster)RoleBinding` should be
-> created and
-> attached to the `ServiceAccount` managed by a `DeploymentRuntimeConfig`. Once you're ready, add the below block to the
-> above document:
->
-> ```yaml
-> ...
-> spec:
->   ...
->   runtimeConfigRef:
->     apiVersion: pkg.crossplane.io/v1beta1
->     kind: RuntimeConfig
->     name: <your-DeploymentRuntimeConfig>
-> ```
 
 * Installing using `helm`:
 
@@ -93,42 +79,56 @@ If set to `true`, the function will output debug information.
 </details>
 
 <details>
-    <summary><i><b>targetRef</b> [expand]</i></summary>
+    <summary><i><b>target</b> [expand]</i></summary>
 
 `Mandatory`
 
 Specifies the target resource that will be created/managed by this function.
 
-| Field        | Description                                                                                 |
-|--------------|---------------------------------------------------------------------------------------------|
-| `namespace`  | The namespace where the target resource will be created/managed.                            |
-| `name`       | The name of the target composition resource name `crossplane.io/composition-resource-name`. |
-| `apiVersion` | The API version of the target resource.                                                     |
-| `kind`       | The kind of the target resource.                                                            |
-| `key`        | The key to the root object field holding data. (defaults to `data`)                         |
+| Field                              | Description                                                                                  |
+|-------------------------------------|------------------------------------------------------------------------------------------------|
+| `namespace`                         | The namespace where the target resource will be created/managed. Omit for cluster-scoped kinds. |
+| `namespaceFromCompositeFieldPath`   | (Optional) A field path on the composite resource to resolve the namespace from.                |
+| `name`                              | The target resource's `metadata.name`. The `crossplane.io/composition-resource-name` annotation is derived from the resource's identity, not this value; see the worked example below.     |
+| `nameFromCompositeFieldPath`        | (Optional) A field path on the composite resource to resolve the name from.                     |
+| `apiVersion`                        | The API version of the target resource.                                                         |
+| `kind`                              | The kind of the target resource.                                                                |
+| `toFieldPath`                       | The field where the merged data is written. (defaults to `data`)                                |
+| `metadata`                          | (Optional) `labels`/`annotations` to set on the target resource.                                |
 
 </details>
 
+> [!NOTE]
+> Changing `name`, or the value `nameFromCompositeFieldPath` resolves to, drops the old target: Crossplane deletes
+> the old object and creates a new one, it does not move data. Changing `apiVersion` between served versions of the
+> same kind does not recreate it, since the target is identified by group and kind only.
+
+> [!NOTE]
+> A namespaced consumer XR is unsupported: the function returns a fatal error naming
+> `target.namespace`, since the target requires a cluster-scoped composite resource.
+
 <details>
-    <summary><i><b>sourceRefs</b> [expand]</i></summary>
+    <summary><i><b>sources</b> [expand]</i></summary>
 
 `Mandatory`
 
 A list of resources that will be used to merge into the target resource.
 
-| Field            | Description                                                         |
-|------------------|---------------------------------------------------------------------|
-| `namespace`      | The namespace where the resource is located.                        |
-| `name`           | The name of the resource.                                           |
-| `apiVersion`     | The API version of the resource.                                    |
-| `kind`           | The kind of the resource.                                           |
-| `key`            | The key to the root object field holding data. (defaults to `data`) |
-| `extractFromKey` | (Optional) The key to extract the data from the resource.           |
+| Field           | Description                                                                    |
+|------------------|---------------------------------------------------------------------------------|
+| `name`           | A unique key identifying this source.                                           |
+| `ref`            | The `apiVersion`, `kind`, `name` and (optional, for cluster-scoped kinds) `namespace` of the resource. |
+| `resolution`     | (Optional) `Required` or `Optional`. (defaults to `Required`)                   |
+| `fromFieldPath`  | (Optional) The field to read data from. (defaults to `data`)                    |
 
 </details>
 
+> [!NOTE]
+> Sources are read from the API server, not from the Composition's desired state, so a resource composed by an
+> earlier step of the same pipeline is not visible to this function as a source.
+
 > [!TIP]
-> Both `targetRef` and `sourceRefs` have full support for both standard kubernetes resources and custom-resources.
+> Both `target` and `sources` have full support for both standard kubernetes resources and custom-resources.
 
 ### Specification
 
@@ -136,7 +136,7 @@ A list of resources that will be used to merge into the target resource.
     * Examples: `ConfigMap`, `EnvironmentConfig`, etc.
     * Using a `ConfigMap`:
        ```yaml
-       targetRef:
+       target:
          namespace: <target-namespace>
          name: <target-name>
          apiVersion: v1
@@ -145,30 +145,31 @@ A list of resources that will be used to merge into the target resource.
 2. Identify which resources will be merged into the target resource.
     * Two `ConfigMap`s and a `EnvironmentConfig`:
        ```yaml
-       resources:
-         - namespace: <resource-namespace>
-           name: <resource-name>
-           apiVersion: v1
-           kind: ConfigMap
-         - namespace: <resource-namespace>
-           name: <resource-name>
-           apiVersion: v1
-           kind: ConfigMap
-         - namespace: <resource-namespace>
-           name: <resource-name>
-           apiVersion: apiextensions.crossplane.io/v1alpha1
-           kind: EnvironmentConfig
+       sources:
+         - name: <source-name>
+           ref:
+             namespace: <resource-namespace>
+             name: <resource-name>
+             apiVersion: v1
+             kind: ConfigMap
+         - name: <source-name>
+           ref:
+             namespace: <resource-namespace>
+             name: <resource-name>
+             apiVersion: v1
+             kind: ConfigMap
+         - name: <source-name>
+           ref:
+             name: <resource-name>
+             apiVersion: apiextensions.crossplane.io/v1beta1
+             kind: EnvironmentConfig
        ```
-3. Define what merging options should be used through the `XR` resource.
+3. Define what merge strategy should be used through the `Input`'s `mergeStrategy` field.
     * Example:
        ```yaml
-       options:
-         override: true
-         appendSlice: true
-         sliceDeepCopy: true
-       transform:
-         stringToMap: true
-       ``` 
+       mergeStrategy: ForceMergeObjects
+       parseEmbedded: true
+       ```
 4. Observe the merged resource.
     * Example:
        ```yaml
@@ -187,31 +188,32 @@ A list of resources that will be used to merge into the target resource.
 > Do note that the data-type compatibility of `data` spec field should to be taken into account when merging results.
 
 > [!TIP]
-> The `XR` can be leveraged to define the merging `boolean` options.
+> The `Input`'s `mergeStrategy` field selects how each source merges into the accumulator. Later sources win by
+> default; the previous, XR-based default was the opposite (first source wins) and was undocumented.
 >
-> ➤ **options** (`map`)
-> | Option | Type | Description |
-> | --- | --- | --- |
-> | `override` | `boolean` | Merge override non-empty dst attributes with non-empty src attributes values. |
-> | `typeCheck` | `boolean` | Merge check types while overwriting it (must be used with `override`). |
-> | `appendSlice` | `boolean` | Merge append slices instead of overwriting it. |
-> | `sliceDeepCopy` | `boolean` | Merge slice element one by one with Overwrite flag. |
-> | `overwriteEmptyValue` | `boolean` | Merge override non-empty dst attributes with empty src attributes values. |
-> | `overrideEmptySlice` | `boolean` | Merge override empty dst slice with empty src slice. |
->
-> ➤ **transform** (`map`)
-> | Option | Type | Description |
-> | --- | --- | --- |
-> | `stringToMap` | `boolean` | String values will be transformed to maps when possible. Allowing for deep-merging. |
->
-> ➤ **mode** (`string`)
-> | Option | Description |
+> ➤ **mergeStrategy** (`string`)
+> | Value | Description |
 > | --- | --- |
-> | `managed` | The function will create a managed resource. (`default`)|
-> | `unmanaged` | The function will create an unmanaged resource. (deletion is not finalized by crossplane) |
-> 
+> | `Replace` | Top-level keys from the later source replace the accumulator wholesale. |
+> | `MergeObjects` | Deep merge; existing non-empty values win over later sources. |
+> | `ForceMergeObjects` | Deep merge; later sources overwrite existing values. (`default`) |
+> | `MergeObjectsAppendArrays` | `MergeObjects`, and arrays are appended instead of overwritten. |
+> | `ForceMergeObjectsAppendArrays` | `ForceMergeObjects`, and arrays are appended instead of overwritten. |
+>
+> ➤ **parseEmbedded** (`boolean`)
+> | Value | Description |
+> | --- | --- |
+> | `true` | String values that are YAML mappings are parsed so their contents deep-merge. |
+> | `false` | String values are merged as-is. (`default`) |
+>
+> Parsing round-trips a blob through YAML: key order, comments and indentation are not preserved, and YAML 1.1
+> coercion applies inside it, so an unquoted `no` becomes `false`. A blob containing more than one YAML document with
+> real content is left unparsed and merged as opaque text. A trailing `---` with nothing after it but whitespace,
+> comments, or an explicit `null` carries no content, so it does not count as a second document and the blob is
+> still parsed.
+>
 > ➤ **debug** (`boolean`)
-> | Option | Description |
+> | Value | Description |
 > | --- | --- |
 > | `true` | The function will output debug information. |
 > | `false` | The function will not output debug information. (`default`) |
@@ -256,41 +258,49 @@ A list of resources that will be used to merge into the target resource.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: function-xresources-merger
+  name: function-resources-merger
 spec:
   compositeTypeRef:
-    apiVersion: resource-merger.canilho.net/v1alpha1
+    apiVersion: resources-merger.fn.canilho.net/v1alpha1
     kind: XR
   mode: Pipeline
   pipeline:
     - step: run
       functionRef:
-        name: function-xresources-merger
+        name: function-resources-merger
       input:
-        apiVersion: resources-merger.fn.canilho.net/v1alpha1
+        apiVersion: resources-merger.fn.canilho.net/v1alpha2
         kind: Input
-        targetRef:
+        mergeStrategy: ForceMergeObjects
+        parseEmbedded: true
+        target:
           namespace: ephemeral
           name: merged
           apiVersion: v1
           kind: ConfigMap
-        sourceRefs:
-          - namespace: ephemeral
-            name: map-1
-            apiVersion: v1
-            kind: ConfigMap
-          - namespace: ephemeral
-            name: map-2
-            apiVersion: v1
-            kind: ConfigMap
-          - namespace: ephemeral
-            name: envcfg-1
-            apiVersion: apiextensions.crossplane.io/v1alpha1
-            kind: EnvironmentConfig
-          - namespace: ephemeral
-            name: envcfg-2
-            apiVersion: apiextensions.crossplane.io/v1alpha1
-            kind: EnvironmentConfig
+        sources:
+          - name: map-1
+            ref:
+              namespace: ephemeral
+              name: map-1
+              apiVersion: v1
+              kind: ConfigMap
+          - name: map-2
+            ref:
+              namespace: ephemeral
+              name: map-2
+              apiVersion: v1
+              kind: ConfigMap
+          - name: envcfg-1
+            ref:
+              name: envcfg-1
+              apiVersion: apiextensions.crossplane.io/v1beta1
+              kind: EnvironmentConfig
+          - name: envcfg-2
+            ref:
+              name: envcfg-2
+              apiVersion: apiextensions.crossplane.io/v1beta1
+              kind: EnvironmentConfig
 ```
 
 </details>
@@ -300,17 +310,11 @@ spec:
 
 ```yaml
 ---
-apiVersion: resource-merger.fn.canilho.net/v1alpha1
+apiVersion: resources-merger.fn.canilho.net/v1alpha1
 kind: XR
 metadata:
   name: merger-results-xr
-spec:
-  options:
-    override: true
-    appendSlice: true
-    sliceDeepCopy: true
-  transform:
-    stringToMap: true
+spec: {}
 ```
 
 </details>
@@ -320,16 +324,16 @@ spec:
 
 ```yaml
 ---
-apiVersion: pkg.crossplane.io/v1beta1
+apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
-  name: function-xresources-merger
+  name: function-resources-merger
   annotations:
-    # This tells crossplane beta render to connect to the function locally.
+    # This tells crossplane composition render to connect to the function locally.
     render.crossplane.io/runtime: Development
 spec:
   # This is ignored when using the Development runtime.
-  package: function-xresources-merger
+  package: function-resources-merger
 
 ```
 
@@ -349,9 +353,19 @@ spec:
     key5: h
     key6: f
   metadata:
+    name: merged
+    namespace: ephemeral
     annotations:
-      crossplane.io/composition-resource-name: merged
-      generateName: merger-results-xr-
+      crossplane.io/composition-resource-name: configmap/ephemeral/merged
+    labels:
+      crossplane.io/composite: merger-results-xr
+    ownerReferences:
+      - apiVersion: resources-merger.fn.canilho.net/v1alpha1
+        kind: XR
+        name: merger-results-xr
+        controller: true
+        blockOwnerDeletion: true
+        uid: <xr-uid>
   ...
   ```
 
@@ -363,12 +377,16 @@ spec:
     ```
 2. Render the example:
     ```shell
-    cd example && crossplane beta render xr.yaml composition.yaml functions.yaml -r
+    cd example && crossplane composition render xr.yaml composition.yaml functions.yaml \
+      --xrd xrd.yaml \
+      --required-resources required-resources.yaml \
+      --crossplane-image xpkg.crossplane.io/crossplane/crossplane:v2.3.4
     ```
 
 ##### References
 
 * `functions`: https://docs.crossplane.io/latest/concepts/composition-functions
 * `go`: https://go.dev
+* `ko`: https://ko.build
 * `docker`: https://www.docker.com
 * `cli`: https://docs.crossplane.io/latest/cli

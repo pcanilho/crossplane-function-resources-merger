@@ -1,15 +1,13 @@
-apiVersion: apiextensions.crossplane.io/v1
+apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
   name: xmergers.resources-merger.fn.canilho.net
 spec:
+  scope: Cluster
   group: resources-merger.fn.canilho.net
   names:
-    kind: xMerger
+    kind: XMerger
     plural: xmergers
-  claimNames:
-    kind: Merger
-    plural: mergers
   versions:
     - name: v1alpha1
       served: true
@@ -21,22 +19,7 @@ spec:
             spec:
               type: object
               properties:
-                options:
-                  type: object
-                  properties:
-                    override:
-                      type: boolean
-                    appendSlice:
-                      type: boolean
-                    sliceDeepCopy:
-                      type: boolean
-                transform:
-                  type: object
-                  properties:
-                    stringToMap:
-                      type: boolean
-                mode:
+                appName:
                   type: string
-                  enum:
-                    - unmanaged
-                    - managed
+              required:
+                - appName

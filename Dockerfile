@@ -3,9 +3,8 @@
 # CI builds the runtime image with ko, not this Dockerfile. See .ko.yaml.
 # Kept as a fallback for building without ko; keep both in sync.
 
-# We use the latest Go 1.x version unless asked to use something else.
-# The GitHub Actions CI job sets this argument for a consistent Go version.
-ARG GO_VERSION=1
+# Pinned for reproducibility. CI sets this too.
+ARG GO_VERSION=1.27.0
 
 FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION} AS build
 

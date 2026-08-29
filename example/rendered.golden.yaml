@@ -1,0 +1,61 @@
+---
+apiVersion: resources-merger.fn.canilho.net/v1alpha1
+kind: XMerger
+metadata:
+  name: merger-results-xr
+spec:
+  crossplane:
+    resourceRefs:
+    - apiVersion: v1
+      kind: ConfigMap
+      name: merged
+      namespace: ephemeral
+status:
+  conditions:
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    reason: WatchCircuitClosed
+    status: "True"
+    type: Responsive
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    message: 4 of 4 sources merged
+    reason: Success
+    status: "True"
+    type: Merged
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    reason: ReconcileSuccess
+    status: "True"
+    type: Synced
+  - lastTransitionTime: "2024-01-01T00:00:00Z"
+    reason: Available
+    status: "True"
+    type: Ready
+---
+apiVersion: v1
+data:
+  app.yaml: |
+    cache:
+      enabled: true
+    database:
+      host: db.example.com
+      port: 5433
+    logLevel: info
+  environment: production
+  flags: |
+    debug: true
+    region: us-east-1
+  owner: app-team
+kind: ConfigMap
+metadata:
+  annotations:
+    crossplane.io/composition-resource-name: configmap/ephemeral/merged
+  labels:
+    crossplane.io/composite: merger-results-xr
+  name: merged
+  namespace: ephemeral
+  ownerReferences:
+  - apiVersion: resources-merger.fn.canilho.net/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: XMerger
+    name: merger-results-xr
+    uid: 0312a0d2-fbe0-5318-a4be-6a71c017a840
