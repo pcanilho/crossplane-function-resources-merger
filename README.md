@@ -117,7 +117,7 @@ A list of resources that will be used to merge into the target resource.
 | Field           | Description                                                                    |
 |------------------|---------------------------------------------------------------------------------|
 | `name`           | A unique key identifying this source.                                           |
-| `ref`            | The `apiVersion`, `kind`, `name` and (optional, for cluster-scoped kinds) `namespace` of the resource. |
+| `ref`            | The `apiVersion`, `kind` and `name` of the resource, plus its `namespace`. Omit `namespace` for cluster-scoped kinds such as `EnvironmentConfig`. |
 | `resolution`     | (Optional) `Required` or `Optional`. (defaults to `Required`)                   |
 | `fromFieldPath`  | (Optional) The field to read data from. (defaults to `data`)                    |
 
@@ -262,7 +262,7 @@ metadata:
 spec:
   compositeTypeRef:
     apiVersion: resources-merger.fn.canilho.net/v1alpha1
-    kind: XR
+    kind: XMerger
   mode: Pipeline
   pipeline:
     - step: run
@@ -311,10 +311,11 @@ spec:
 ```yaml
 ---
 apiVersion: resources-merger.fn.canilho.net/v1alpha1
-kind: XR
+kind: XMerger
 metadata:
   name: merger-results-xr
-spec: {}
+spec:
+  appName: merged
 ```
 
 </details>
@@ -361,7 +362,7 @@ spec:
       crossplane.io/composite: merger-results-xr
     ownerReferences:
       - apiVersion: resources-merger.fn.canilho.net/v1alpha1
-        kind: XR
+        kind: XMerger
         name: merger-results-xr
         controller: true
         blockOwnerDeletion: true
