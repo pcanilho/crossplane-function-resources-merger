@@ -4,22 +4,24 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: inputs.resources-merger.fn.canilho.net
+  name: merges.merger.fn.canilho.net
 spec:
-  group: resources-merger.fn.canilho.net
+  group: merger.fn.canilho.net
   names:
     categories:
     - crossplane
-    kind: Input
-    listKind: InputList
-    plural: inputs
-    singular: input
+    kind: Merge
+    listKind: MergeList
+    plural: merges
+    singular: merge
   scope: Namespaced
   versions:
-  - name: v1alpha2
+  - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: Input can be used to provide input to this Function.
+        description: |-
+          Merge describes one merge: which resources to read, how to combine them, and
+          where to write the result.
         properties:
           allowedSourceNamespaces:
             description: |-
@@ -64,14 +66,20 @@ spec:
             type: boolean
           sources:
             items:
-              description: Source is one input to the merge. Order in Input.Sources
-                is precedence order.
+              description: |-
+                Source is one input to the merge.
+
+                Order in Merge.Sources is fold order, and what that means for precedence
+                depends on Merge.MergeStrategy. Under Replace, ForceMergeObjects and
+                ForceMergeObjectsAppendArrays a later source overrides an earlier one. Under
+                MergeObjects and MergeObjectsAppendArrays the accumulator wins, so an earlier
+                source takes precedence and later sources only fill in absent keys.
               properties:
                 allowCrossNamespace:
                   description: |-
                     AllowCrossNamespace permits this source to be read from a namespace other
                     than the composite resource's own. The namespace must also appear in
-                    Input.AllowedSourceNamespaces. Only meaningful when the composite is
+                    Merge.AllowedSourceNamespaces. Only meaningful when the composite is
                     namespaced; ignored when it is cluster scoped, where cross namespace
                     reads are already the norm.
                   type: boolean
@@ -82,6 +90,35 @@ spec:
                   description: Name is unique across sources. It is the required resource
                     key.
                   type: string
+                parse:
+                  description: |-
+                    Parse scopes and shapes embedded-blob parsing for this source,
+                    overriding the Input-level parseEmbedded. A source with no Parse block
+                    follows parseEmbedded.
+
+                    When ToFieldPath is also set, the nested subtree collapses to one blob,
+                    so per-key format detection is meaningless: Auto always re-encodes the
+                    whole subtree as YAML, and only an explicit Format overrides it.
+                  properties:
+                    format:
+                      description: |-
+                        Format defaults to Auto. It is a no-op for any target that is not a
+                        ConfigMap or Secret: only those two targets re-encode the merged data to
+                        strings, so a value parsed for an EnvironmentConfig or CRD target keeps
+                        its native map shape regardless of Format.
+                      enum:
+                      - Auto
+                      - YAML
+                      - JSON
+                      type: string
+                    keys:
+                      description: |-
+                        Keys lists the data keys to parse. Empty means every key, which is what
+                        the Input-level parseEmbedded does.
+                      items:
+                        type: string
+                      type: array
+                  type: object
                 ref:
                   description: ResourceRef identifies one existing resource.
                   properties:
@@ -91,6 +128,16 @@ spec:
                       type: string
                     name:
                       type: string
+                    nameFromCompositeFieldPath:
+                      description: |-
+                        NameFromCompositeFieldPath resolves Name from a field path on the
+                        composite resource, for example "spec.tenant". Mutually exclusive with
+                        Name.
+
+                        There is deliberately no namespace equivalent. Namespace stays a static
+                        string chosen by the Composition author, which bounds what a source can
+                        ever be steered at.
+                      type: string
                     namespace:
                       description: Namespace is empty for cluster scoped kinds such
                         as EnvironmentConfig.
@@ -98,13 +145,25 @@ spec:
                   required:
                   - apiVersion
                   - kind
-                  - name
                   type: object
                 resolution:
                   description: Resolution says whether a source must exist.
                   enum:
                   - Required
                   - Optional
+                  type: string
+                toFieldPath:
+                  description: |-
+                    ToFieldPath places this source's contribution under a subtree of the
+                    merged result instead of at its root. Dotted, for example
+                    "teams.payments". Empty means the root, which is the default.
+
+                    This is placement, not precedence: the fold order and Merge.MergeStrategy
+                    are unchanged.
+
+                    For a ConfigMap or Secret target, data is map[string]string, so a nested
+                    subtree is not representable. It is YAML-encoded into a single string
+                    value at the top-level key of this path.
                   type: string
               required:
               - name
@@ -117,6 +176,19 @@ spec:
             properties:
               apiVersion:
                 type: string
+              context:
+                description: |-
+                  Context additionally writes the merged result into the Composition
+                  context, for later pipeline steps. The composed resource is still
+                  produced; this is an additional destination, not an alternative one.
+                properties:
+                  key:
+                    description: Key is the context key the merged result is written
+                      to.
+                    type: string
+                required:
+                - key
+                type: object
               kind:
                 type: string
               metadata:
@@ -142,6 +214,20 @@ spec:
                 type: string
               namespaceFromCompositeFieldPath:
                 type: string
+              readiness:
+                description: Readiness defaults to True.
+                enum:
+                - "True"
+                - "False"
+                type: string
+              stringifyScalars:
+                description: |-
+                  StringifyScalars coerces a top-level non-string scalar to a string for a
+                  ConfigMap or Secret target instead of failing. Off by default: the
+                  coercion is one way, since an int written as "3" never returns as an int.
+                  It exists for EnvironmentConfig and CR sources, whose data may legally
+                  hold numbers. Every coerced key is named on the Merged condition.
+                type: boolean
               toFieldPath:
                 description: ToFieldPath defaults to data.
                 type: string

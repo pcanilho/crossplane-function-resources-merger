@@ -5,23 +5,23 @@ import (
 	"fmt"
 
 	"dario.cat/mergo"
-	"github.com/pcanilho/crossplane-function-resources-merger/input/v1alpha2"
+	"github.com/pcanilho/crossplane-function-resources-merger/input/v1beta1"
 	"github.com/pkg/errors"
 )
 
 // Options returns the mergo options for a strategy. Replace has no option
 // representation; it is handled by Merge before mergo is reached.
-func Options(s v1alpha2.MergeStrategy) ([]func(*mergo.Config), error) {
+func Options(s v1beta1.MergeStrategy) ([]func(*mergo.Config), error) {
 	switch s {
-	case "", v1alpha2.StrategyForceMergeObjects:
+	case "", v1beta1.StrategyForceMergeObjects:
 		return []func(*mergo.Config){mergo.WithOverride}, nil
-	case v1alpha2.StrategyMergeObjects:
+	case v1beta1.StrategyMergeObjects:
 		return nil, nil
-	case v1alpha2.StrategyForceMergeObjectsAppendArrays:
+	case v1beta1.StrategyForceMergeObjectsAppendArrays:
 		return []func(*mergo.Config){mergo.WithOverride, mergo.WithAppendSlice}, nil
-	case v1alpha2.StrategyMergeObjectsAppendArrays:
+	case v1beta1.StrategyMergeObjectsAppendArrays:
 		return []func(*mergo.Config){mergo.WithAppendSlice}, nil
-	case v1alpha2.StrategyReplace:
+	case v1beta1.StrategyReplace:
 		return nil, nil
 	default:
 		return nil, errors.Errorf("unknown merge strategy %q", s)
@@ -31,8 +31,8 @@ func Options(s v1alpha2.MergeStrategy) ([]func(*mergo.Config), error) {
 // Merge applies src onto dst under the given strategy and returns the result.
 // Neither dst nor src is modified, and the returned map shares no nested map
 // or slice with either input.
-func Merge(dst, src map[string]any, s v1alpha2.MergeStrategy) (map[string]any, error) {
-	if s == v1alpha2.StrategyReplace {
+func Merge(dst, src map[string]any, s v1beta1.MergeStrategy) (map[string]any, error) {
+	if s == v1beta1.StrategyReplace {
 		out := deepCopyMap(dst)
 		for k, v := range src {
 			out[k] = deepCopyValue(v)

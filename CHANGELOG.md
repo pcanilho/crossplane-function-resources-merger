@@ -5,6 +5,72 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-01
+
+### Changed
+
+- **Breaking:** a composed resource an earlier pipeline step produced under the same derived
+  key is no longer silently overwritten. It is now a fatal error. If you relied on an earlier
+  step creating the shell and this function filling `data`, that pipeline must be restructured.
+- **The `Input` API moved from `resources-merger.fn.canilho.net/v1alpha2` to
+  `merger.fn.canilho.net/v1beta1`, and the kind is now `Merge`.** `Input` was
+  the placeholder name left over from `crossplane/function-template-go`, and
+  `resources-` narrowed nothing: everything in a Composition is resources.
+  Update the `input:` block of every pipeline step that references this
+  function:
+
+  ```yaml
+  # before
+  apiVersion: resources-merger.fn.canilho.net/v1alpha2
+  kind: Input
+
+  # after
+  apiVersion: merger.fn.canilho.net/v1beta1
+  kind: Merge
+  ```
+
+  No field names changed, so the rest of each `input:` block is untouched.
+  Nothing in the cluster needs recreating: the input is opaque bytes embedded
+  in a Composition, never a stored object in its own right.
+- The `Merged` condition reports `False` with reason `NoData` when no source contributed data.
+  Previously it was always `True`/`Success`, so a typo'd `fromFieldPath` that emptied the merge
+  reported success.
+- A resolved `target.nameFromCompositeFieldPath` value must be a DNS subdomain. A field path
+  that resolves to something else is now fatal, rather than composing a resource whose name the
+  API server would reject anyway, or corrupting the desired-state key's separators.
+
+### Added
+
+- `sources[].toFieldPath` places one source's contribution under a subtree of the merged result
+  instead of at the root.
+- `sources[].parse.format` and `sources[].parse.keys` scope and shape embedded-blob parsing per
+  source, overriding the Input-level `parseEmbedded`. `format` (`Auto`, `YAML` or `JSON`)
+  controls re-encoding on output for a `ConfigMap` or `Secret` target; `keys` scopes which data
+  keys are parsed.
+- `sources[].ref.nameFromCompositeFieldPath` resolves a source's name from a field path on the
+  composite, for a per-tenant overlay chosen by the XR. The namespace stays a static string and
+  cannot be combined with `allowCrossNamespace`.
+- `target.stringifyScalars` coerces a top-level non-string scalar to a string for a `ConfigMap`
+  or `Secret` target instead of failing. Off by default; one-way.
+- `target.readiness` (`True` or `False`) lets a Composition author override the resource's
+  reported readiness. Defaults to `True`.
+- `target.context.key` additionally writes the merged result into the Composition context, for
+  a later pipeline step to read without a second lookup of the composed resource. The composed
+  resource is still produced.
+
+### Fixed
+
+- Requirement keys are namespaced under this function's own API group, so a Composition's own
+  `requirementName` can no longer collide with a source name and shadow it.
+- The missing-required-source error now names the namespace, the field most often got wrong.
+- Every configuration problem is reported in one `Fatal`, not just the first. Three
+  misconfigured sources used to take three reconciles to fix, one at a time.
+- A source's `parse.format`, detected from its own JSON or YAML origin, no longer leaks onto a
+  same-named top-level key contributed by a different, nested source.
+- `target.context`'s value no longer inherits `ConfigMap` stringification or `Secret`
+  base64-encoding: it is written from the merged result before that coercion runs, so it carries
+  the natural typed value regardless of the target's kind.
+
 ## [0.3.1] - 2026-09-01
 
 Maintenance only. The merge behaviour, the `Input` schema and the `Merged`
@@ -241,6 +307,7 @@ already there.
 
 See the [release notes](https://github.com/pcanilho/crossplane-function-resources-merger/releases/tag/v0.1.8).
 
+[0.4.0]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.1.8...v0.2.0

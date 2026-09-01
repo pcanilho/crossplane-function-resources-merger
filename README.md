@@ -2,7 +2,7 @@
 [![Dependabot Updates](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/dependabot/dependabot-updates)
 [![SAST](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/sast.yaml/badge.svg)](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/sast.yaml)
 
-![version](https://img.shields.io/badge/Version-v0.3.1-blue)
+![version](https://img.shields.io/badge/Version-v0.4.0-blue)
 <p align="center" width="100%">
     <img src="https://github.com/pcanilho/crossplane-function-resources-merger/blob/main/docs/images/banner.png?raw=true" width="220"></img>
     <br>
@@ -42,7 +42,7 @@ kind: Function
 metadata:
   name: function-resources-merger
 spec:
-  package: ghcr.io/pcanilho/crossplane-function-resources-merger:v0.3.1
+  package: ghcr.io/pcanilho/crossplane-function-resources-merger:v0.4.0
 EOF
 ```
 
@@ -60,12 +60,12 @@ dependencies:
 crossplane:
   function:
     packages:
-      - ghcr.io/pcanilho/crossplane-function-resources-merger:v0.3.1
+      - ghcr.io/pcanilho/crossplane-function-resources-merger:v0.4.0
 ```
 
 ## How-to-use
 
-### Function `Input` specification
+### Function `Merge` specification
 
 <details>
     <summary><i><b>debug</b> [expand]</i></summary>
@@ -93,6 +93,30 @@ Specifies the target resource that will be created/managed by this function.
 | `kind`                              | The kind of the target resource.                                                                |
 | `toFieldPath`                       | The field where the merged data is written. (defaults to `data`)                                |
 | `metadata`                          | (Optional) `labels`/`annotations` to set on the target resource.                                |
+| `stringifyScalars`                  | (Optional) Coerces a top-level non-string scalar (number or boolean) to a string for a `ConfigMap` or `Secret` target instead of failing. Off by default. One-way: a coerced value never returns as a number or boolean. Every coerced key is named on the `Merged` condition. |
+| `readiness`                         | (Optional) `True` or `False`. Reported on the composed resource. (defaults to `True`)           |
+| `context`                           | (Optional) Additionally writes the merged result into the Composition context. See below.       |
+
+> [!TIP]
+> ➤ **context** (`object`)
+>
+> | Field | Description                                                              |
+> |-------|----------------------------------------------------------------------------|
+> | `key` | The Composition context key the merged result is written to. Required when `context` is set. |
+>
+> This is additive, not an alternative output: the composed resource above is still created either
+> way. It lets a later pipeline step, for example `function-patch-and-transform` or
+> `function-go-templating`, read the merged result straight from `context[key]` without a second
+> lookup of the composed resource. Writing the pipeline context is not unique to this function:
+> `function-extra-resources` and `function-environment-configs` both do it, the latter's own
+> description being "retrieve and merge EnvironmentConfigs into the Context". What differs here is
+> the merge configuration, since neither of those exposes a `mergeStrategy` or the other options
+> above.
+>
+> The published value is the merged result itself, regardless of the target's `kind`: it is not
+> stringified for a `ConfigMap` target and not base64-encoded for a `Secret` target. Those
+> encodings exist only because of the composed resource's own Kubernetes API shape, and context is
+> an independent destination.
 
 </details>
 
@@ -100,6 +124,13 @@ Specifies the target resource that will be created/managed by this function.
 > Changing `name`, or the value `nameFromCompositeFieldPath` resolves to, drops the old target: Crossplane deletes
 > the old object and creates a new one, it does not move data. Changing `apiVersion` between served versions of the
 > same kind does not recreate it, since the target is identified by group and kind only.
+
+> [!NOTE]
+> `readiness` is deliberately a two-value enum, `True` or `False`, with no unset or `Unspecified`
+> option. Crossplane collapses an unspecified readiness to false rather than "unknown", which
+> leaves the composite at `Ready=False, Reason=Creating` with an immediate requeue and an event per
+> reconcile, and `function-auto-ready` cannot rescue it. Set `readiness: "False"` only when another
+> mechanism is responsible for flipping it true.
 
 > [!NOTE]
 > Under a namespaced composite resource, Crossplane pins the target to the composite's own
@@ -128,9 +159,28 @@ A list of resources that will be used to merge into the target resource.
 |------------------|---------------------------------------------------------------------------------|
 | `name`           | A unique key identifying this source.                                           |
 | `ref`            | The `apiVersion`, `kind` and `name` of the resource, plus its `namespace`. Omit `namespace` for cluster-scoped kinds such as `EnvironmentConfig`. |
+| `ref.nameFromCompositeFieldPath` | (Optional) Resolves `ref.name` from a field path on the composite resource, for example `spec.tenant`. Mutually exclusive with `ref.name`; one of the two is required. The resolved value must be a DNS subdomain. Cannot be combined with `allowCrossNamespace`; see the note below. |
 | `resolution`     | (Optional) `Required` or `Optional`. (defaults to `Required`)                   |
 | `fromFieldPath`  | (Optional) The field to read data from. (defaults to `data`) If absent on an otherwise existing resource, the source contributes nothing rather than failing. |
-| `allowCrossNamespace` | (Optional) Permits this source to be read from a namespace other than the composite's. The namespace must also appear in `allowedSourceNamespaces`. Ignored for a cluster-scoped composite. |
+| `allowCrossNamespace` | (Optional) Permits this source to be read from a namespace other than the composite's. The namespace must also appear in `allowedSourceNamespaces`. Ignored for a cluster-scoped composite. Cannot be combined with `ref.nameFromCompositeFieldPath`. |
+| `toFieldPath`    | (Optional) Places this source's contribution under a dotted subtree of the merged result, for example `teams.payments`, instead of at the root. Runs before the fold, so `mergeStrategy` still applies to the nested shape. (defaults to the root) |
+| `parse`          | (Optional) Scopes and shapes embedded-blob parsing for this source, overriding the Input-level `parseEmbedded`. See below. |
+
+> [!TIP]
+> ➤ **parse** (`object`)
+>
+> A source with no `parse` block follows the Input-level `parseEmbedded`, which is retained
+> unchanged. Where both are set, the source's own `parse` wins.
+>
+> | Field    | Description                                                                    |
+> |----------|---------------------------------------------------------------------------------|
+> | `format` | (Optional) `Auto`, `YAML` or `JSON`. Forces re-encoding in that serialization, overriding the origin detected while parsing. Applies only to a `ConfigMap` or `Secret` target; any other target keeps the parsed value as a native map, and `format` has no effect. (defaults to `Auto`) |
+> | `keys`   | (Optional) The data keys to parse. Empty means every key, which is what the Input-level `parseEmbedded` does. |
+>
+> `keys` fixes the prose hazard below: name only the keys that hold embedded config, and prose
+> containing `: ` is left as a string. `format` fixes the JSON hazard on a source whose values
+> hold JSON blobs, scoping with `keys` if only some do: set it to `JSON` and those values re-encode
+> as JSON, not YAML.
 
 </details>
 
@@ -152,9 +202,154 @@ list says which namespaces are trusted. Ignored for a cluster-scoped composite.
 > [!TIP]
 > Both `target` and `sources` have full support for both standard kubernetes resources and custom-resources.
 
+### Per-tenant sources
+
+One Composition, one overlay `ConfigMap` per tenant. `ref.nameFromCompositeFieldPath` reads the
+name from the composite, so the Composition does not have to be duplicated per tenant:
+
+```yaml
+sources:
+  - name: base
+    ref:
+      namespace: platform
+      name: base-config
+      apiVersion: v1
+      kind: ConfigMap
+  - name: overlay
+    ref:
+      namespace: platform
+      nameFromCompositeFieldPath: spec.tenant
+      apiVersion: v1
+      kind: ConfigMap
+```
+
+> [!NOTE]
+> This example assumes a cluster-scoped composite. Both sources pin `namespace: platform`
+> statically; under a namespaced composite outside `platform` that is a cross-namespace read, and
+> `allowCrossNamespace` cannot rescue it, since it is rejected alongside
+> `ref.nameFromCompositeFieldPath`. A namespaced composite needs its overlay sources pinned to its
+> own namespace instead.
+
+A composite with `spec.tenant: acme` merges `platform/base-config` then `platform/acme`. The
+`Merged` condition records every resolution, so the resource actually read is visible on the
+composite: `2 of 2 sources merged; resolved names: overlay -> acme`.
+
+> [!IMPORTANT]
+> **Under a namespaced composite, the name is confined to the composite's own namespace: Crossplane
+> pins every read there regardless of what the field path resolves to. Under a cluster-scoped
+> composite, as in this example, there is no composite namespace to confine to; the bound is the
+> static `ref.namespace` the Composition author pinned instead.** Whoever can write the composite
+> chooses the *name*, not the namespace, and Crossplane fetches sources under its own cluster-wide
+> ServiceAccount, which no per-name RBAC restricts. Two things bound that:
+>
+> - There is deliberately no `namespaceFromCompositeFieldPath` on a source. The namespace stays a
+>   static string chosen by the Composition author.
+> - `ref.nameFromCompositeFieldPath` and `allowCrossNamespace` cannot be combined, and the
+>   function rejects a source that sets both. `allowedSourceNamespaces` pins a namespace but not
+>   a name; it was written for a statically named source, where the admin pinned both. Together
+>   they would let a composite name any resource of that kind inside a permitted foreign
+>   namespace, which is exactly the read the pair exists to confine.
+>
+> What remains: under a namespaced composite, a source with a resolved name can be steered at any
+> resource of its kind **in the composite's own namespace**, including one the composite's owner
+> could not read directly if their RBAC excludes it by `resourceNames`. Treat a resolved name as
+> reachable by whoever writes the composite, and keep such sources to kinds whose whole namespace
+> that principal may already read.
+>
+> Resolution happens where the requirement is declared, so a name that is missing, empty, or not
+> a DNS subdomain omits that source's selector entirely and fails the composition. A source that
+> is never requested is a resource that is never read.
+
+### Placing a source under a subtree
+
+Two sources merging into one `EnvironmentConfig`, one at the root and one nested under
+`teams.payments` via `toFieldPath`:
+
+```yaml
+sources:
+  - name: shared
+    ref:
+      namespace: platform
+      name: shared-config
+      apiVersion: v1
+      kind: ConfigMap
+  - name: payments
+    toFieldPath: teams.payments
+    ref:
+      namespace: platform
+      name: payments-config
+      apiVersion: v1
+      kind: ConfigMap
+```
+
+```yaml
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: merged
+data:
+  shared: "yes"
+  teams:
+    payments:
+      owner: payments
+```
+
+> [!NOTE]
+> A `ConfigMap` or `Secret` target's `data` is `map[string]string`, so a nested subtree is not
+> representable. It is YAML-encoded into a single string value at the top-level key of the path,
+> so expect one encoded blob per top-level prefix rather than nested keys.
+>
+> When a source combines `toFieldPath` with `parse`, the nested subtree collapses to one blob:
+> `parse.format: Auto` always re-encodes it as YAML, since per-key origin detection no longer
+> applies once the keys are nested away. Set `parse.format` explicitly to override this.
+
+### Secrets
+
+A `Secret` source is base64-decoded on read, so the merge operates on plaintext exactly as it
+does for a `ConfigMap`. A `Secret` target has every merged value base64-encoded back into
+`data`.
+
+- **A `Secret` source requires a `Secret` target.** Anything else is a fatal error. Merging
+  secret material into a `ConfigMap` would write it out in plaintext.
+- **`stringData` is never written**, only `data`. Server-side apply never owns `stringData`, so
+  a key removed from the merge would never be removed from the `Secret`.
+- Under a namespaced composite, a `Secret` target whose `target.namespace` disagrees with the
+  composite's namespace is fatal rather than a warning. Relocating secret material quietly is
+  not safe.
+
 ### Specification
 
-1. Select which is the target resource that will be created/managed by this function.
+1. Define the XRD's `scope`. It decides how the rest of this page behaves, and is the first thing to get right.
+    * Example:
+       ```yaml
+       apiVersion: apiextensions.crossplane.io/v2
+       kind: CompositeResourceDefinition
+       metadata:
+         name: xmergers.resources-merger.fn.canilho.net
+       spec:
+         scope: Cluster        # or Namespaced, which is the Crossplane v2 default
+         group: resources-merger.fn.canilho.net
+         names:
+           kind: XMerger
+           plural: xmergers
+         versions:
+           - name: v1alpha1
+             served: true
+             referenceable: true
+             schema:
+               openAPIV3Schema:
+                 type: object
+                 properties:
+                   spec:
+                     type: object
+       ```
+    * |  | `scope: Cluster` | `scope: Namespaced` |
+      |---|---|---|
+      | `target.namespace` | honoured | **ignored**, pinned to the composite's namespace |
+      | Cross-namespace sources | unrestricted | needs `allowCrossNamespace` **and** `allowedSourceNamespaces` |
+      | Cluster-scoped targets such as `EnvironmentConfig` | supported | **rejected**, a namespaced composite cannot own one |
+    * Working manifests for both are in [`example/`](example/) and [`example/namespaced/`](example/namespaced/).
+2. Select which is the target resource that will be created/managed by this function.
     * Examples: `ConfigMap`, `EnvironmentConfig`, etc.
     * Using a `ConfigMap`:
        ```yaml
@@ -164,7 +359,7 @@ list says which namespaces are trusted. Ignored for a cluster-scoped composite.
          apiVersion: v1
          kind: ConfigMap
        ```
-2. Identify which resources will be merged into the target resource.
+3. Identify which resources will be merged into the target resource.
     * Two `ConfigMap`s and a `EnvironmentConfig`:
        ```yaml
        sources:
@@ -186,13 +381,13 @@ list says which namespaces are trusted. Ignored for a cluster-scoped composite.
              apiVersion: apiextensions.crossplane.io/v1beta1
              kind: EnvironmentConfig
        ```
-3. Define what merge strategy should be used through the `Input`'s `mergeStrategy` field.
+4. Define what merge strategy should be used through the `Merge`'s `mergeStrategy` field.
     * Example:
        ```yaml
        mergeStrategy: ForceMergeObjects
        parseEmbedded: true
        ```
-4. Observe the merged resource.
+5. Observe the merged resource.
     * Example:
        ```yaml
        apiVersion: v1
@@ -210,30 +405,61 @@ list says which namespaces are trusted. Ignored for a cluster-scoped composite.
 > Do note that the data-type compatibility of `data` spec field should to be taken into account when merging results.
 
 > [!TIP]
-> The `Input`'s `mergeStrategy` field selects how each source merges into the accumulator. Later sources win by
-> default; the previous, XR-based default was the opposite (first source wins) and was undocumented.
+> The `Merge`'s `mergeStrategy` field selects how each source merges into the accumulator. The default,
+> `ForceMergeObjects`, has later sources win. `MergeObjects` and `MergeObjectsAppendArrays` are fill-only: the
+> accumulator wins, so an earlier source takes precedence. See the precedence table below.
 >
 > ➤ **mergeStrategy** (`string`)
 > | Value | Description |
 > | --- | --- |
-> | `Replace` | Top-level keys from the later source replace the accumulator wholesale. |
+> | `Replace` | Top-level keys the later source sets overwrite the same key in the accumulator wholesale; keys it does not set survive unchanged. |
 > | `MergeObjects` | Deep merge; existing non-empty values win over later sources. |
 > | `ForceMergeObjects` | Deep merge; later sources overwrite existing values. (`default`) |
 > | `MergeObjectsAppendArrays` | `MergeObjects`, and arrays are appended instead of overwritten. |
 > | `ForceMergeObjectsAppendArrays` | `ForceMergeObjects`, and arrays are appended instead of overwritten. |
->
+
+| Strategy | Conflicting scalar | Nested map | Arrays | Explicit null from a later source |
+|---|---|---|---|---|
+| `ForceMergeObjects` (default) | later source wins | recursive, later wins | replaced | kept |
+| `ForceMergeObjectsAppendArrays` | later source wins | recursive, later wins | appended | kept |
+| `MergeObjects` | **earlier source wins** | recursive, fill-only | kept | **dropped** |
+| `MergeObjectsAppendArrays` | **earlier source wins** | recursive, fill-only | appended | **dropped** |
+| `Replace` | later source wins | **replaced wholesale** | replaced | kept |
+
+> [!IMPORTANT]
+> `MergeObjects` and `MergeObjectsAppendArrays` are fill-only: the accumulator wins, so an
+> **earlier** source takes precedence. To layer overrides on top of a base, which is the usual
+> intent, use the default `ForceMergeObjects`.
+
+> [!TIP]
 > ➤ **parseEmbedded** (`boolean`)
 > | Value | Description |
 > | --- | --- |
 > | `true` | String values that are YAML mappings are parsed so their contents deep-merge. |
 > | `false` | String values are merged as-is. (`default`) |
+
+> [!IMPORTANT]
+> Parsing round-trips a value through a YAML decoder and encoder, which preserves the data but
+> not its formatting. With `parseEmbedded: true`:
 >
-> Parsing round-trips a blob through YAML: key order, comments and indentation are not preserved, and YAML 1.1
-> coercion applies inside it, so an unquoted `no` becomes `false`. A blob containing more than one YAML document with
-> real content is left unparsed and merged as opaque text. A trailing `---` with nothing after it but whitespace,
-> comments, or an explicit `null` carries no content, so it does not count as a second document and the blob is
-> still parsed.
+> - **A JSON value is re-encoded as YAML.** JSON is valid YAML, so `{"name":"svc","port":8080}`
+>   comes back as `name: svc\nport: 8080\n`. Set that source's `parse.format` to `JSON` to keep it
+>   as JSON.
+> - **Prose containing `: ` is parsed as a mapping.** `error: connection refused` becomes a map,
+>   not a string. Scope that source's `parse.keys` to the keys that actually hold embedded config
+>   to avoid this.
+> - **Scalars inside a parsed blob gain quotes**: `a: no` re-encodes as `a: "no"`. It stays the
+>   string `no`; yaml.v3 is YAML 1.2 and does not coerce it to a boolean.
+> - **Trailing zeros are lost**: `3.10` re-encodes as `3.1`.
+> - **Key order, indentation, comments and anchors are not preserved.** A round-tripped blob
+>   comes back alphabetically sorted and 2-space indented even when nothing merged into it.
 >
+> A top-level value that is not a mapping is never parsed and passes through untouched. A blob
+> containing more than one YAML document with real content is left unparsed and merged as opaque
+> text. A trailing `---` with nothing after it but whitespace, comments, or an explicit `null`
+> carries no content, so it does not count as a second document and the blob is still parsed.
+
+> [!TIP]
 > ➤ **debug** (`boolean`)
 > | Value | Description |
 > | --- | --- |
@@ -291,8 +517,8 @@ spec:
       functionRef:
         name: function-resources-merger
       input:
-        apiVersion: resources-merger.fn.canilho.net/v1alpha2
-        kind: Input
+        apiVersion: merger.fn.canilho.net/v1beta1
+        kind: Merge
         mergeStrategy: ForceMergeObjects
         parseEmbedded: true
         target:

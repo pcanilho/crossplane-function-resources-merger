@@ -7,10 +7,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pcanilho/crossplane-function-resources-merger/input/v1alpha2"
+	"github.com/pcanilho/crossplane-function-resources-merger/input/v1beta1"
 	"github.com/pcanilho/crossplane-function-resources-merger/internal/merger"
 	"github.com/pcanilho/crossplane-function-resources-merger/internal/transformer"
+	"google.golang.org/protobuf/types/known/structpb"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/fieldpath"
@@ -27,6 +29,14 @@ import (
 // Input does not name a path.
 const defaultFieldPath = "data"
 
+// requirementPrefix stops a Composition author's own requirementName from
+// colliding with this function's requirement keys.
+const requirementPrefix = "merger.fn.canilho.net/"
+
+// requirementKey is the key a source is requested and read back under. Source
+// names stay unprefixed everywhere else: Merge, errors, conditions.
+func requirementKey(sourceName string) string { return requirementPrefix + sourceName }
+
 // Function returns whatever response you ask it to.
 type Function struct {
 	fnv1.UnimplementedFunctionRunnerServiceServer
@@ -37,7 +47,7 @@ type Function struct {
 // resolvedSource pairs a declared source with the items Crossplane resolved for
 // it. An empty items slice means Crossplane looked and found nothing.
 type resolvedSource struct {
-	source v1alpha2.Source
+	source v1beta1.Source
 	items  []resource.Required
 }
 
@@ -61,7 +71,7 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1.RunFunctionRequest) 
 		return rsp, nil
 	}
 
-	in := &v1alpha2.Input{}
+	in := &v1beta1.Merge{}
 	if err := request.GetInput(req, in); err != nil {
 		response.Fatal(rsp, errors.Wrapf(err, "cannot get Function input from %T", req))
 		return rsp, nil
@@ -99,15 +109,24 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1.RunFunctionRequest) 
 	// Requirements are built on every call, resolved or not. Crossplane
 	// compares the requirements a function returns against the ones it sent to
 	// decide whether the function has converged. They are built after the
-	// composite is read because the confinement guard needs its namespace.
-	selectors, problems, crossedNamespaces := requirements(in, xrNamespace)
+	// composite is read because the confinement guard needs its namespace and
+	// ref.nameFromCompositeFieldPath needs its spec.
+	selectors, problems, crossedNamespaces, resolvedNames := requirements(in, oxr, xrNamespace)
 	rsp.Requirements = &fnv1.Requirements{Resources: selectors}
 	if len(problems) > 0 {
-		response.Fatal(rsp, problems[0])
+		// Aggregating is not the usual choice, but these are all static Input
+		// errors surfaced together: reporting one per reconcile makes the
+		// author fix N misconfigurations in N cycles.
+		response.Fatal(rsp, errors.Join(problems...))
 		return rsp, nil
 	}
 
-	warnNoOpCrossNamespaceFlags(rsp, in.Sources)
+	// One rename site. requirements() renamed its own copies for the selector
+	// it emitted; every consumer from here on reads this slice, never
+	// in.Sources, so a source's ref.name is the resource actually requested.
+	sources := renamedSources(in.Sources, resolvedNames)
+
+	warnNoOpCrossNamespaceFlags(rsp, sources)
 
 	name, namespace, err := targetIdentity(oxr, in, xrNamespace)
 	if err != nil {
@@ -133,9 +152,9 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1.RunFunctionRequest) 
 
 	// Sources are walked in declared order. The requirement map is never
 	// ranged: it is a Go map and the merge is an order dependent left fold.
-	resolved := make([]resolvedSource, 0, len(in.Sources))
-	for _, src := range in.Sources {
-		items, ok, err := request.GetRequiredResource(req, src.Name)
+	resolved := make([]resolvedSource, 0, len(sources))
+	for _, src := range sources {
+		items, ok, err := request.GetRequiredResource(req, requirementKey(src.Name))
 		if err != nil {
 			response.Fatal(rsp, errors.Wrapf(err, "cannot read required resource %q", src.Name))
 			return rsp, nil
@@ -149,37 +168,71 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1.RunFunctionRequest) 
 		resolved = append(resolved, resolvedSource{source: src, items: items})
 	}
 
-	merged, mergedCount, skipped, noData, err := mergeSources(in, resolved)
+	merged, formats, mergedCount, skipped, noData, err := mergeSources(in, resolved)
 	if err != nil {
 		response.Fatal(rsp, err)
 		return rsp, nil
 	}
 
+	// Below the GetRequiredResource wait loop above, so an unresolved source can
+	// never reach this point and produce a half-built context value. Written
+	// from the merged result before ConfigMap/Secret coercion, so context gets
+	// the natural typed value regardless of the target's Kind: a number stays a
+	// number, a nested object stays an object, and a Secret target does not
+	// force every consumer to base64-decode it.
+	if c := in.Target.Context; c != nil {
+		v, err := structpb.NewStruct(merged)
+		if err != nil {
+			response.Fatal(rsp, errors.Wrapf(err, "cannot encode the merged result for context key %q", c.Key))
+			return rsp, nil
+		}
+		response.SetContextKey(rsp, c.Key, structpb.NewStructValue(v))
+	}
+
+	var coerced []string
 	switch {
 	case isCoreV1Kind(gvkTarget, "ConfigMap"):
-		lowered, err := transformer.LowerToStringMap(merged)
+		lowered, c, err := transformer.LowerToStringMapWith(merged, formats, in.Target.StringifyScalars)
 		if err != nil {
 			response.Fatal(rsp, errors.Wrap(err, "cannot lower merged data for a ConfigMap target"))
 			return rsp, nil
 		}
 		merged = lowered
+		coerced = c
 	case isCoreV1Kind(gvkTarget, "Secret"):
 		// Server-side apply never persists stringData, only data. Writing
 		// stringData would leave the field manager owning a field absent from
 		// storage, and keys removed from the merge would never be removed from
 		// the Secret.
-		encoded, err := secretData(merged)
+		encoded, c, err := secretData(merged, formats, in.Target.StringifyScalars)
 		if err != nil {
 			response.Fatal(rsp, errors.Wrap(err, "cannot encode merged data for a Secret target"))
 			return rsp, nil
 		}
 		merged = encoded
+		coerced = c
 	}
 
-	msg := mergedMessage(mergedCount, len(in.Sources), skipped, noData, crossedNamespaces, xrNamespace, ignoredTargetNamespace)
-	response.ConditionTrue(rsp, "Merged", "Success").TargetCompositeAndClaim().WithMessage(msg)
+	msg := mergedMessage(mergedReport{
+		mergedCount:            mergedCount,
+		sources:                sources,
+		skipped:                skipped,
+		noData:                 noData,
+		crossedNamespaces:      crossedNamespaces,
+		resolvedNames:          resolvedNames,
+		xrNamespace:            xrNamespace,
+		ignoredTargetNamespace: ignoredTargetNamespace,
+		coerced:                coerced,
+	})
+	// A merge that contributed nothing is not a success. Not fatal: an absent
+	// field is benign by design, and Merged is a custom type Crossplane drops from XR readiness.
+	if mergedCount == 0 {
+		response.ConditionFalse(rsp, "Merged", "NoData").TargetCompositeAndClaim().WithMessage(msg)
+	} else {
+		response.ConditionTrue(rsp, "Merged", "Success").TargetCompositeAndClaim().WithMessage(msg)
+	}
 
-	cd, err := compose(in, gvkTarget, name, composeNamespace, merged)
+	cd, ready, err := compose(in, gvkTarget, name, composeNamespace, merged)
 	if err != nil {
 		response.Fatal(rsp, err)
 		return rsp, nil
@@ -196,7 +249,12 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1.RunFunctionRequest) 
 		return rsp, nil
 	}
 	key := desiredName(gvkTarget.GroupKind(), keyNamespace, name)
-	desired[key] = &resource.DesiredComposed{Resource: cd, Ready: resource.ReadyTrue}
+	if _, taken := desired[key]; taken {
+		// Silently replacing it would discard an earlier step's resource with no signal.
+		response.Fatal(rsp, errors.Errorf("an earlier pipeline step already produced a composed resource under key %q; this function will not overwrite it", key))
+		return rsp, nil
+	}
+	desired[key] = &resource.DesiredComposed{Resource: cd, Ready: ready}
 	if err := response.SetDesiredComposedResources(rsp, desired); err != nil {
 		response.Fatal(rsp, errors.Wrap(err, "cannot set desired composed resources"))
 		return rsp, nil
@@ -224,7 +282,7 @@ func clusterScopedTargetGuard(gvkTarget schema.GroupVersionKind, xrNamespace str
 // warnNoOpCrossNamespaceFlags warns on each source whose allowCrossNamespace is
 // set but can have no effect, because an empty ref.namespace already means a
 // cluster scoped kind.
-func warnNoOpCrossNamespaceFlags(rsp *fnv1.RunFunctionResponse, sources []v1alpha2.Source) {
+func warnNoOpCrossNamespaceFlags(rsp *fnv1.RunFunctionResponse, sources []v1beta1.Source) {
 	for _, src := range sources {
 		if src.AllowCrossNamespace && src.Ref.Namespace == "" {
 			response.Warning(rsp, errors.Errorf("allowCrossNamespace on source %q has no effect: an empty ref.namespace already means a cluster scoped kind", src.Name)).
@@ -262,32 +320,81 @@ func namespacePinning(gvkTarget schema.GroupVersionKind, xrNamespace, namespace 
 	return "", xrNamespace, namespace, nil
 }
 
+// mergedReport is everything the Merged condition's message is assembled from.
+// A struct rather than a parameter list: the clauses only ever grow, and a
+// positional call of eight same-typed arguments is easy to transpose silently.
+type mergedReport struct {
+	mergedCount int
+	// sources is the renamed slice, so ref.name is what was requested.
+	sources                []v1beta1.Source
+	skipped                []string
+	noData                 []string
+	crossedNamespaces      []v1beta1.Source
+	resolvedNames          map[string]string
+	xrNamespace            string
+	ignoredTargetNamespace string
+	// coerced names every key stringifyScalars coerced from a non-string
+	// scalar, sorted by the transformer for a deterministic message.
+	coerced []string
+}
+
 // mergedMessage assembles the Merged condition's message from its optional
 // clauses, in the fixed order: base count, skipped optional sources, sources
-// whose field was absent, cross-namespace audit, ignored target.namespace.
-func mergedMessage(mergedCount, total int, skipped, noData []string, crossedNamespaces []v1alpha2.Source, xrNamespace, ignoredTargetNamespace string) string {
-	msg := fmt.Sprintf("%d of %d sources merged", mergedCount, total)
-	if len(skipped) > 0 {
-		msg += "; skipped optional: " + strings.Join(skipped, ", ")
+// whose field was absent, cross-namespace audit, field-path-resolved names,
+// ignored target.namespace, coerced scalars.
+func mergedMessage(r mergedReport) string {
+	msg := fmt.Sprintf("%d of %d sources merged", r.mergedCount, len(r.sources))
+	if len(r.skipped) > 0 {
+		msg += "; skipped optional: " + strings.Join(r.skipped, ", ")
 	}
-	if len(noData) > 0 {
-		msg += "; no data: " + strings.Join(noData, ", ")
+	if len(r.noData) > 0 {
+		msg += "; no data: " + strings.Join(r.noData, ", ")
 	}
-	if len(crossedNamespaces) > 0 {
-		notes := make([]string, 0, len(crossedNamespaces))
-		for _, src := range crossedNamespaces {
+	if len(r.crossedNamespaces) > 0 {
+		notes := make([]string, 0, len(r.crossedNamespaces))
+		for _, src := range r.crossedNamespaces {
 			notes = append(notes, fmt.Sprintf("%s -> %s/%s in %s", src.Name, src.Ref.Kind, src.Ref.Name, src.Ref.Namespace))
 		}
 		msg += "; cross-namespace: " + strings.Join(notes, ", ")
 	}
-	if ignoredTargetNamespace != "" {
-		msg += fmt.Sprintf("; ignored target.namespace: %q, using %q", ignoredTargetNamespace, xrNamespace)
+	if len(r.resolvedNames) > 0 {
+		// Declared source order, not map order: the message is persisted on the
+		// composite and must not flap between reconciles.
+		names := make([]string, 0, len(r.resolvedNames))
+		for _, src := range r.sources {
+			if v, ok := r.resolvedNames[src.Name]; ok {
+				names = append(names, fmt.Sprintf("%s -> %s", src.Name, v))
+			}
+		}
+		msg += "; resolved names: " + strings.Join(names, ", ")
+	}
+	if r.ignoredTargetNamespace != "" {
+		msg += fmt.Sprintf("; ignored target.namespace: %q, using %q", r.ignoredTargetNamespace, r.xrNamespace)
+	}
+	if len(r.coerced) > 0 {
+		msg += "; coerced: " + strings.Join(r.coerced, ", ")
 	}
 	return msg
 }
 
+// renamedSources returns sources with every field-path-resolved ref.name
+// applied. The input is never mutated: it is the Input the caller parsed.
+func renamedSources(sources []v1beta1.Source, resolvedNames map[string]string) []v1beta1.Source {
+	if len(resolvedNames) == 0 {
+		return sources
+	}
+	out := make([]v1beta1.Source, len(sources))
+	copy(out, sources)
+	for i := range out {
+		if v, ok := resolvedNames[out[i].Name]; ok {
+			out[i].Ref.Name = v
+		}
+	}
+	return out
+}
+
 // validate checks everything about an Input that does not need the request.
-func validate(in *v1alpha2.Input) error {
+func validate(in *v1beta1.Merge) error {
 	if in.Target.APIVersion == "" || in.Target.Kind == "" {
 		return errors.New("no target resource group version kind")
 	}
@@ -322,6 +429,9 @@ func validate(in *v1alpha2.Input) error {
 	if slices.Contains(in.AllowedSourceNamespaces, "") {
 		return errors.New("allowedSourceNamespaces must not contain an empty namespace")
 	}
+	if in.Target.Context != nil && in.Target.Context.Key == "" {
+		return errors.New("target.context.key is required when target.context is set")
+	}
 
 	target := schema.FromAPIVersionAndKind(in.Target.APIVersion, in.Target.Kind)
 	seen := make(map[string]bool, len(in.Sources))
@@ -341,8 +451,19 @@ func validate(in *v1alpha2.Input) error {
 		if strings.ContainsAny(src.Ref.Kind, "./") {
 			return errors.Errorf("source %q ref.kind %q must not contain \".\" or \"/\"", src.Name, src.Ref.Kind)
 		}
-		if src.Ref.Name == "" {
-			return errors.Errorf("source %q has no resource name", src.Name)
+		if src.Ref.Name != "" && src.Ref.NameFromCompositeFieldPath != "" {
+			return errors.Errorf("source %q sets both ref.name and ref.nameFromCompositeFieldPath; they are mutually exclusive", src.Name)
+		}
+		if src.Ref.Name == "" && src.Ref.NameFromCompositeFieldPath == "" {
+			return errors.Errorf("source %q has no resource name; set ref.name or ref.nameFromCompositeFieldPath", src.Name)
+		}
+		// allowedSourceNamespaces pins a namespace, not a name. It was written
+		// for a statically named source, where the admin pinned both. A
+		// composite-supplied name in a permitted foreign namespace would select
+		// any resource of this kind there, which is the read the pair exists to
+		// confine.
+		if src.Ref.NameFromCompositeFieldPath != "" && src.AllowCrossNamespace {
+			return errors.Errorf("source %q sets both ref.nameFromCompositeFieldPath and allowCrossNamespace; they cannot be combined, because allowedSourceNamespaces pins a namespace but not a name, so the composite could name any %s in the permitted namespace", src.Name, src.Ref.Kind)
 		}
 		// Secret data is base64. Merging it into a ConfigMap would emit garbage
 		// and write the secret material out in plaintext.
@@ -359,7 +480,7 @@ func validate(in *v1alpha2.Input) error {
 //
 // resolution does not soften this. A violation is a configuration error, not a
 // missing resource.
-func crossNamespaceViolation(in *v1alpha2.Input, src v1alpha2.Source, xrNamespace string) error {
+func crossNamespaceViolation(in *v1beta1.Merge, src v1beta1.Source, xrNamespace string) error {
 	if xrNamespace == "" || src.Ref.Namespace == "" || src.Ref.Namespace == xrNamespace {
 		return nil
 	}
@@ -373,20 +494,47 @@ func crossNamespaceViolation(in *v1alpha2.Input, src v1alpha2.Source, xrNamespac
 }
 
 // requirements is one ResourceSelector per source, keyed by the source's name.
-// A source whose read would cross namespaces without permission is omitted
-// from the map entirely; the caller reports the accumulated problems. crossed
-// lists, in declared order, every source permitted to read another namespace,
-// for the Merged condition's cross-namespace audit trail.
-func requirements(in *v1alpha2.Input, xrNamespace string) (out map[string]*fnv1.ResourceSelector, problems []error, crossed []v1alpha2.Source) {
+// A source whose name cannot be resolved, or whose read would cross namespaces
+// without permission, is omitted from the map entirely; the caller reports the
+// accumulated problems. crossed lists, in declared order, every source
+// permitted to read another namespace, for the Merged condition's
+// cross-namespace audit trail. resolvedNames maps a source name to the resource
+// name a field path produced for it, for the same condition's audit trail.
+//
+// ref.nameFromCompositeFieldPath is resolved here, and nowhere later, because
+// this is where the read is asked for. By the time a source reaches
+// mergeSources Crossplane has already fetched it under its own cluster-wide
+// ServiceAccount, so a guard there would block the merge, not the read.
+func requirements(in *v1beta1.Merge, oxr *resource.Composite, xrNamespace string) (out map[string]*fnv1.ResourceSelector, problems []error, crossed []v1beta1.Source, resolvedNames map[string]string) {
 	out = make(map[string]*fnv1.ResourceSelector, len(in.Sources))
+	resolvedNames = map[string]string{}
 
 	for _, src := range in.Sources {
+		var resolvedName string
+		if p := src.Ref.NameFromCompositeFieldPath; p != "" {
+			name, err := resolveSourceName(oxr, src.Name, p)
+			if err != nil {
+				problems = append(problems, err)
+				continue
+			}
+			// src is a per-iteration copy, so this renames the source only for
+			// the selector and the cross-namespace audit trail built below.
+			src.Ref.Name = name
+			resolvedName = name
+		}
+
 		if err := crossNamespaceViolation(in, src, xrNamespace); err != nil {
 			// Omit the selector entirely. Crossplane does check for fatal
 			// results before acting on requirements, but that ordering is
 			// internal to Crossplane, not a guarantee of the proto.
 			problems = append(problems, err)
 			continue
+		}
+
+		// Recorded only once the source survives every guard, so the audit
+		// trail lists what was requested, not what was resolved then rejected.
+		if resolvedName != "" {
+			resolvedNames[src.Name] = resolvedName
 		}
 
 		if xrNamespace != "" && src.Ref.Namespace != "" && src.Ref.Namespace != xrNamespace {
@@ -404,15 +552,43 @@ func requirements(in *v1alpha2.Input, xrNamespace string) (out map[string]*fnv1.
 			ns := src.Ref.Namespace
 			sel.Namespace = &ns
 		}
-		out[src.Name] = sel
+		out[requirementKey(src.Name)] = sel
 	}
-	return out, problems, crossed
+	return out, problems, crossed, resolvedNames
+}
+
+// resolveSourceName reads one source's resource name from a field path on the
+// observed composite. Every failure is an error rather than a fallback: the
+// caller omits the selector, so an unresolved name is never requested.
+func resolveSourceName(oxr *resource.Composite, sourceName, path string) (string, error) {
+	v, err := oxr.Resource.GetString(path)
+	if err != nil {
+		return "", errors.Wrapf(err, "source %q: cannot resolve ref.nameFromCompositeFieldPath %q", sourceName, path)
+	}
+	if v == "" {
+		return "", errors.Errorf("source %q: ref.nameFromCompositeFieldPath %q resolved to an empty name", sourceName, path)
+	}
+	if err := validateResourceName(v); err != nil {
+		return "", errors.Wrapf(err, "source %q: ref.nameFromCompositeFieldPath %q resolved to %q", sourceName, path, v)
+	}
+	return v, nil
+}
+
+// validateResourceName rejects a resolved name that is not a DNS subdomain.
+// Applied to every field path that produces a name: for a target it keeps
+// desiredName injective, whose keys separate on "/", and for a source it keeps
+// the selector to names the API server could hold.
+func validateResourceName(name string) error {
+	if errs := validation.IsDNS1123Subdomain(name); len(errs) > 0 {
+		return errors.Errorf("not a valid resource name: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // targetIdentity resolves the target's name and namespace. Field paths are read
 // from the observed composite resource: the Composition author names the path,
 // and no XR spec field is ever hardcoded here.
-func targetIdentity(oxr *resource.Composite, in *v1alpha2.Input, xrNamespace string) (string, string, error) {
+func targetIdentity(oxr *resource.Composite, in *v1beta1.Merge, xrNamespace string) (string, string, error) {
 	name := in.Target.Name
 	namespace := in.Target.Namespace
 
@@ -427,6 +603,11 @@ func targetIdentity(oxr *resource.Composite, in *v1alpha2.Input, xrNamespace str
 		}
 		if v == "" {
 			return "", "", errors.Errorf("target.nameFromCompositeFieldPath %q resolved to an empty name", p)
+		}
+		// This is the field path that actually feeds desiredName, whose
+		// injectivity rests on a name being a DNS subdomain.
+		if err := validateResourceName(v); err != nil {
+			return "", "", errors.Wrapf(err, "target.nameFromCompositeFieldPath %q resolved to %q", p, v)
 		}
 		name = v
 	}
@@ -453,26 +634,31 @@ func targetIdentity(oxr *resource.Composite, in *v1alpha2.Input, xrNamespace str
 // how many sources contributed data, the names of any Optional sources that
 // resolved to nothing, and the names of any sources that resolved but whose
 // field was absent, for the Merged condition.
-func mergeSources(in *v1alpha2.Input, resolved []resolvedSource) (merged map[string]any, mergedCount int, skipped, noData []string, err error) {
+func mergeSources(in *v1beta1.Merge, resolved []resolvedSource) (merged map[string]any, formats map[string]v1beta1.ParseFormat, mergedCount int, skipped, noData []string, err error) {
 	merged = map[string]any{}
+	formats = map[string]v1beta1.ParseFormat{}
 	folded := false
 
 	for _, rs := range resolved {
 		src := rs.source
 		if len(rs.items) == 0 {
 			// Crossplane looked and the source does not exist.
-			if src.Resolution == v1alpha2.ResolutionOptional {
+			if src.Resolution == v1beta1.ResolutionOptional {
 				skipped = append(skipped, src.Name)
 				continue
 			}
-			return nil, 0, nil, nil, errors.Errorf("source %q is required but %s %q does not exist", src.Name, src.Ref.Kind, src.Ref.Name)
+			where := fmt.Sprintf("namespace %q", src.Ref.Namespace)
+			if src.Ref.Namespace == "" {
+				where = "the cluster scope"
+			}
+			return nil, nil, 0, nil, nil, errors.Errorf("source %q is required but %s %q does not exist in %s", src.Name, src.Ref.Kind, src.Ref.Name, where)
 		}
 
 		contributed := false
 		for _, item := range rs.items {
 			data, absent, err := sourceData(src, item)
 			if err != nil {
-				return nil, 0, nil, nil, err
+				return nil, nil, 0, nil, nil, err
 			}
 			if absent {
 				// The resource exists but fromFieldPath does not. Contributes
@@ -480,8 +666,26 @@ func mergeSources(in *v1alpha2.Input, resolved []resolvedSource) (merged map[str
 				continue
 			}
 			contributed = true
-			if in.ParseEmbedded {
+			switch {
+			case src.Parse != nil:
+				var origin map[string]v1beta1.ParseFormat
+				data, origin = transformer.ParseWith(data, src.Parse.Keys)
+				if src.ToFieldPath == "" {
+					// A nested key never surfaces at merged's top level for
+					// this source, so recording it here would only risk
+					// clobbering an unrelated sibling source's own key.
+					for k, f := range origin {
+						formats[k] = f
+					}
+				}
+			case in.ParseEmbedded:
 				data = transformer.Parse(data)
+			}
+			data = nest(src.ToFieldPath, data)
+			if src.Parse != nil && src.Parse.Format != "" && src.Parse.Format != v1beta1.ParseFormatAuto {
+				for k := range data {
+					formats[k] = src.Parse.Format
+				}
 			}
 			if !folded {
 				// The accumulator starts as the first source, normalized
@@ -497,7 +701,7 @@ func mergeSources(in *v1alpha2.Input, resolved []resolvedSource) (merged map[str
 			}
 			merged, err = merger.Merge(merged, data, in.MergeStrategy)
 			if err != nil {
-				return nil, 0, nil, nil, errors.Wrapf(err, "cannot merge source %q", src.Name)
+				return nil, nil, 0, nil, nil, errors.Wrapf(err, "cannot merge source %q", src.Name)
 			}
 		}
 		if contributed {
@@ -507,7 +711,21 @@ func mergeSources(in *v1alpha2.Input, resolved []resolvedSource) (merged map[str
 		}
 	}
 
-	return merged, mergedCount, skipped, noData, nil
+	return merged, formats, mergedCount, skipped, noData, nil
+}
+
+// nest wraps data in the subtree named by a dotted path. Runs before the fold,
+// so the merge strategy applies to the nested shape.
+func nest(path string, data map[string]any) map[string]any {
+	if path == "" {
+		return data
+	}
+	segments := strings.Split(path, ".")
+	out := data
+	for i := len(segments) - 1; i >= 0; i-- {
+		out = map[string]any{segments[i]: out}
+	}
+	return out
 }
 
 // sourceData reads a source's fromFieldPath and insists it is an object. An
@@ -518,7 +736,7 @@ func mergeSources(in *v1alpha2.Input, resolved []resolvedSource) (merged map[str
 // (fieldpath.IsNotFound): the source contributes nothing, not an error. Any
 // other GetValue failure, and a field that resolves to something other than
 // an object, is a static Input bug and remains fatal.
-func sourceData(src v1alpha2.Source, item resource.Required) (data map[string]any, absent bool, err error) {
+func sourceData(src v1beta1.Source, item resource.Required) (data map[string]any, absent bool, err error) {
 	path := src.FromFieldPath
 	if path == "" {
 		path = defaultFieldPath
@@ -567,8 +785,11 @@ func decodeSecretData(name string, data map[string]any) (map[string]any, error) 
 	return out, nil
 }
 
-// compose builds the desired composed resource.
-func compose(in *v1alpha2.Input, gvk schema.GroupVersionKind, name, namespace string, data map[string]any) (*composed.Unstructured, error) {
+// compose builds the desired composed resource, along with the readiness it
+// should be reported with. Readiness defaults to true; target.readiness:
+// False is the only way to report false, since Ready_READY_UNSPECIFIED
+// collapses to false in Crossplane and must never be exposed here.
+func compose(in *v1beta1.Merge, gvk schema.GroupVersionKind, name, namespace string, data map[string]any) (*composed.Unstructured, resource.Ready, error) {
 	cd := composed.New()
 	cd.SetGroupVersionKind(gvk)
 	cd.SetName(name)
@@ -590,27 +811,32 @@ func compose(in *v1alpha2.Input, gvk schema.GroupVersionKind, name, namespace st
 		path = defaultFieldPath
 	}
 	if err := cd.SetValue(path, data); err != nil {
-		return nil, errors.Wrapf(err, "cannot set target field %q", path)
+		return nil, resource.ReadyUnspecified, errors.Wrapf(err, "cannot set target field %q", path)
 	}
-	return cd, nil
+
+	ready := resource.ReadyTrue
+	if in.Target.Readiness == v1beta1.ReadinessFalse {
+		ready = resource.ReadyFalse
+	}
+	return cd, ready, nil
 }
 
 // secretData lowers merged data to strings, as for a ConfigMap, then
 // base64-encodes each value for a Secret's data field.
-func secretData(merged map[string]any) (map[string]any, error) {
-	lowered, err := transformer.LowerToStringMap(merged)
+func secretData(merged map[string]any, formats map[string]v1beta1.ParseFormat, stringify bool) (map[string]any, []string, error) {
+	lowered, coerced, err := transformer.LowerToStringMapWith(merged, formats, stringify)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	out := make(map[string]any, len(lowered))
 	for k, v := range lowered {
 		s, ok := v.(string)
 		if !ok {
-			return nil, errors.Errorf("key %q lowered to %T, want a string", k, v)
+			return nil, nil, errors.Errorf("key %q lowered to %T, want a string", k, v)
 		}
 		out[k] = base64.StdEncoding.EncodeToString([]byte(s))
 	}
-	return out, nil
+	return out, coerced, nil
 }
 
 // desiredName derives the desired state map key from the target's identity:

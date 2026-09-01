@@ -12,8 +12,8 @@ spec:
     functionRef:
       name: function-resources-merger
     input:
-      apiVersion: resources-merger.fn.canilho.net/v1alpha2
-      kind: Input
+      apiVersion: merger.fn.canilho.net/v1beta1
+      kind: Merge
       mergeStrategy: ForceMergeObjects
       parseEmbedded: true
       # Trusted namespaces. A source also needs allowCrossNamespace.

@@ -39,10 +39,13 @@ data:
       host: db.example.com
       port: 5433
     logLevel: info
-  environment: production
+  environment: staging
   flags: |
     debug: true
-    region: us-east-1
+  overrides: |
+    environment: production
+    flags:
+      region: us-east-1
   owner: app-team
 kind: ConfigMap
 metadata:

@@ -4,44 +4,52 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pcanilho/crossplane-function-resources-merger/input/v1alpha2"
+	"github.com/pcanilho/crossplane-function-resources-merger/input/v1beta1"
 )
 
 const keepVal = "keep"
 
+// precedenceFirst and precedenceSecond mark which of the two conflicting
+// scalars TestPrecedenceDirectionIsPinned expects to win under a given
+// strategy.
+const (
+	precedenceFirst  = "FIRST"
+	precedenceSecond = "SECOND"
+)
+
 func TestMerge(t *testing.T) {
 	cases := map[string]struct {
-		strategy v1alpha2.MergeStrategy
+		strategy v1beta1.MergeStrategy
 		dst      map[string]any
 		src      map[string]any
 		want     map[string]any
 	}{
 		"ForceMergeObjectsIncomingWins": {
-			strategy: v1alpha2.StrategyForceMergeObjects,
+			strategy: v1beta1.StrategyForceMergeObjects,
 			dst:      map[string]any{"a": "1", "b": keepVal},
 			src:      map[string]any{"a": "2"},
 			want:     map[string]any{"a": "2", "b": keepVal},
 		},
 		"MergeObjectsExistingWins": {
-			strategy: v1alpha2.StrategyMergeObjects,
+			strategy: v1beta1.StrategyMergeObjects,
 			dst:      map[string]any{"a": "1"},
 			src:      map[string]any{"a": "2", "c": "3"},
 			want:     map[string]any{"a": "1", "c": "3"},
 		},
 		"ForceMergeObjectsIsDeep": {
-			strategy: v1alpha2.StrategyForceMergeObjects,
+			strategy: v1beta1.StrategyForceMergeObjects,
 			dst:      map[string]any{"n": map[string]any{"x": "1", "y": keepVal}},
 			src:      map[string]any{"n": map[string]any{"x": "2"}},
 			want:     map[string]any{"n": map[string]any{"x": "2", "y": keepVal}},
 		},
 		"ReplaceSwapsSubtree": {
-			strategy: v1alpha2.StrategyReplace,
+			strategy: v1beta1.StrategyReplace,
 			dst:      map[string]any{"n": map[string]any{"x": "1", "y": "gone"}},
 			src:      map[string]any{"n": map[string]any{"x": "2"}},
 			want:     map[string]any{"n": map[string]any{"x": "2"}},
 		},
 		"AppendArrays": {
-			strategy: v1alpha2.StrategyForceMergeObjectsAppendArrays,
+			strategy: v1beta1.StrategyForceMergeObjectsAppendArrays,
 			dst:      map[string]any{"l": []any{"a"}},
 			src:      map[string]any{"l": []any{"b"}},
 			want:     map[string]any{"l": []any{"a", "b"}},
@@ -92,7 +100,7 @@ func TestMergeNormalizesNonStringKeyedMaps(t *testing.T) {
 		"n": map[any]any{1: "a", 2: "b"},
 	}
 
-	got, err := Merge(map[string]any{}, src, v1alpha2.StrategyForceMergeObjects)
+	got, err := Merge(map[string]any{}, src, v1beta1.StrategyForceMergeObjects)
 	if err != nil {
 		t.Fatalf("Merge(...): unexpected error: %v", err)
 	}
@@ -112,14 +120,14 @@ func TestMergeNormalizesNonStringKeyedMaps(t *testing.T) {
 // explicit nil, even though that key does not exist in dst at all.
 func TestMergeDropsExplicitNullKeyUnderSomeStrategies(t *testing.T) {
 	cases := map[string]struct {
-		strategy v1alpha2.MergeStrategy
+		strategy v1beta1.MergeStrategy
 		survives bool
 	}{
-		"ForceMergeObjects":             {v1alpha2.StrategyForceMergeObjects, true},
-		"MergeObjects":                  {v1alpha2.StrategyMergeObjects, false},
-		"ForceMergeObjectsAppendArrays": {v1alpha2.StrategyForceMergeObjectsAppendArrays, true},
-		"MergeObjectsAppendArrays":      {v1alpha2.StrategyMergeObjectsAppendArrays, false},
-		"Replace":                       {v1alpha2.StrategyReplace, true},
+		"ForceMergeObjects":             {v1beta1.StrategyForceMergeObjects, true},
+		"MergeObjects":                  {v1beta1.StrategyMergeObjects, false},
+		"ForceMergeObjectsAppendArrays": {v1beta1.StrategyForceMergeObjectsAppendArrays, true},
+		"MergeObjectsAppendArrays":      {v1beta1.StrategyMergeObjectsAppendArrays, false},
+		"Replace":                       {v1beta1.StrategyReplace, true},
 	}
 
 	for name, tc := range cases {
@@ -171,7 +179,7 @@ func TestMergeResultDoesNotAliasInputs(t *testing.T) {
 			"n": map[string]any{"x": "2"},
 		}
 
-		got, err := Merge(dst, src, v1alpha2.StrategyReplace)
+		got, err := Merge(dst, src, v1beta1.StrategyReplace)
 		if err != nil {
 			t.Fatalf("Merge(...): unexpected error: %v", err)
 		}
@@ -199,7 +207,7 @@ func TestMergeResultDoesNotAliasInputs(t *testing.T) {
 			"extra": map[string]any{"e": "only-src"},
 		}
 
-		got, err := Merge(dst, src, v1alpha2.StrategyForceMergeObjects)
+		got, err := Merge(dst, src, v1beta1.StrategyForceMergeObjects)
 		if err != nil {
 			t.Fatalf("Merge(...): unexpected error: %v", err)
 		}
@@ -220,4 +228,29 @@ func TestMergeResultDoesNotAliasInputs(t *testing.T) {
 			t.Errorf("mutating the result mutated src[\"extra\"][\"e\"]: got %q, want %q", v, "only-src")
 		}
 	})
+}
+
+// TestPrecedenceDirectionIsPinned fixes the documented direction of every
+// strategy against the implementation, so the README table and the code cannot
+// drift apart.
+func TestPrecedenceDirectionIsPinned(t *testing.T) {
+	cases := map[v1beta1.MergeStrategy]string{
+		"":                                precedenceSecond,
+		v1beta1.StrategyForceMergeObjects: precedenceSecond,
+		v1beta1.StrategyForceMergeObjectsAppendArrays: precedenceSecond,
+		v1beta1.StrategyReplace:                       precedenceSecond,
+		v1beta1.StrategyMergeObjects:                  precedenceFirst,
+		v1beta1.StrategyMergeObjectsAppendArrays:      precedenceFirst,
+	}
+	for s, want := range cases {
+		dst := map[string]any{"k": precedenceFirst}
+		src := map[string]any{"k": precedenceSecond}
+		got, err := Merge(dst, src, s)
+		if err != nil {
+			t.Fatalf("Merge(%q): unexpected error: %v", s, err)
+		}
+		if got["k"] != want {
+			t.Errorf("Merge(%q): conflicting scalar resolves to %v, want %v. If this changed deliberately, update the README precedence table and the Input doc comment in the same commit.", s, got["k"], want)
+		}
+	}
 }
