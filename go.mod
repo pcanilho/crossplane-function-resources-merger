@@ -1,6 +1,6 @@
 module github.com/pcanilho/crossplane-function-resources-merger
 
-go 1.25.10
+go 1.27.0
 
 require (
 	dario.cat/mergo v1.0.2

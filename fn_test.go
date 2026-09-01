@@ -98,8 +98,6 @@ const (
 	}`
 )
 
-func ptr[T any](v T) *T { return &v }
-
 // twoSourceRequirements is what twoSourceInput must always ask Crossplane for.
 func twoSourceRequirements() *fnv1.Requirements {
 	return &fnv1.Requirements{Resources: map[string]*fnv1.ResourceSelector{
@@ -107,13 +105,13 @@ func twoSourceRequirements() *fnv1.Requirements {
 			ApiVersion: "v1",
 			Kind:       kindConfigMap,
 			Match:      &fnv1.ResourceSelector_MatchName{MatchName: "map-1"},
-			Namespace:  ptr("platform"),
+			Namespace:  new("platform"),
 		},
 		"b": {
 			ApiVersion: "v1",
 			Kind:       kindConfigMap,
 			Match:      &fnv1.ResourceSelector_MatchName{MatchName: "map-2"},
-			Namespace:  ptr("platform"),
+			Namespace:  new("platform"),
 		},
 	}}
 }
@@ -124,7 +122,7 @@ func oneSourceRequirements() *fnv1.Requirements {
 			ApiVersion: "v1",
 			Kind:       kindConfigMap,
 			Match:      &fnv1.ResourceSelector_MatchName{MatchName: "map-1"},
-			Namespace:  ptr("platform"),
+			Namespace:  new("platform"),
 		},
 	}}
 }
@@ -137,7 +135,7 @@ func mergedCondition(msg string) []*fnv1.Condition {
 		Status:  fnv1.Status_STATUS_CONDITION_TRUE,
 		Reason:  "Success",
 		Target:  fnv1.Target_TARGET_COMPOSITE_AND_CLAIM.Enum(),
-		Message: ptr(msg),
+		Message: new(msg),
 	}}
 }
 
@@ -1009,7 +1007,7 @@ func TestRunFunction(t *testing.T) {
 							ApiVersion: "v1",
 							Kind:       "Secret",
 							Match:      &fnv1.ResourceSelector_MatchName{MatchName: "creds"},
-							Namespace:  ptr("platform"),
+							Namespace:  new("platform"),
 						},
 					}},
 					Conditions: mergedCondition("1 of 1 sources merged"),
@@ -1050,7 +1048,7 @@ func TestRunFunction(t *testing.T) {
 							ApiVersion: "v1",
 							Kind:       "Secret",
 							Match:      &fnv1.ResourceSelector_MatchName{MatchName: "creds"},
-							Namespace:  ptr("platform"),
+							Namespace:  new("platform"),
 						},
 					}},
 					Results: []*fnv1.Result{{

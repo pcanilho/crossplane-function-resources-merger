@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/pcanilho/crossplane-function-resources-merger/input/v1alpha2"
@@ -318,10 +319,8 @@ func validate(in *v1alpha2.Input) error {
 		return errors.Wrapf(err, "target.apiVersion %q is invalid", in.Target.APIVersion)
 	}
 
-	for _, ns := range in.AllowedSourceNamespaces {
-		if ns == "" {
-			return errors.New("allowedSourceNamespaces must not contain an empty namespace")
-		}
+	if slices.Contains(in.AllowedSourceNamespaces, "") {
+		return errors.New("allowedSourceNamespaces must not contain an empty namespace")
 	}
 
 	target := schema.FromAPIVersionAndKind(in.Target.APIVersion, in.Target.Kind)
@@ -367,10 +366,8 @@ func crossNamespaceViolation(in *v1alpha2.Input, src v1alpha2.Source, xrNamespac
 	if !src.AllowCrossNamespace {
 		return errors.Errorf("source %q reads namespace %q but the composite is in %q; set allowCrossNamespace and list the namespace in allowedSourceNamespaces to permit this", src.Name, src.Ref.Namespace, xrNamespace)
 	}
-	for _, ns := range in.AllowedSourceNamespaces {
-		if ns == src.Ref.Namespace {
-			return nil
-		}
+	if slices.Contains(in.AllowedSourceNamespaces, src.Ref.Namespace) {
+		return nil
 	}
 	return errors.Errorf("source %q reads namespace %q, which is not in allowedSourceNamespaces", src.Name, src.Ref.Namespace)
 }
