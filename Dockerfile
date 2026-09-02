@@ -4,7 +4,7 @@
 # Kept as a fallback for building without ko; keep both in sync.
 
 # Pinned for reproducibility. CI sets this too.
-ARG GO_VERSION=1.27.0
+ARG GO_VERSION=1.27.1
 
 FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION} AS build
 
