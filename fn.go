@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -674,9 +675,7 @@ func mergeSources(in *v1beta1.Merge, resolved []resolvedSource) (merged map[stri
 					// A nested key never surfaces at merged's top level for
 					// this source, so recording it here would only risk
 					// clobbering an unrelated sibling source's own key.
-					for k, f := range origin {
-						formats[k] = f
-					}
+					maps.Copy(formats, origin)
 				}
 			case in.ParseEmbedded:
 				data = transformer.Parse(data)
@@ -722,8 +721,8 @@ func nest(path string, data map[string]any) map[string]any {
 	}
 	segments := strings.Split(path, ".")
 	out := data
-	for i := len(segments) - 1; i >= 0; i-- {
-		out = map[string]any{segments[i]: out}
+	for _, segment := range slices.Backward(segments) {
+		out = map[string]any{segment: out}
 	}
 	return out
 }
