@@ -1,10 +1,10 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: xmergers.resources-merger.fn.canilho.net
+  name: xmergers.example.canilho.net
 spec:
   scope: Cluster
-  group: resources-merger.fn.canilho.net
+  group: example.canilho.net
   names:
     kind: XMerger
     plural: xmergers

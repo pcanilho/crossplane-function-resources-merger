@@ -1,5 +1,5 @@
 ---
-apiVersion: resources-merger.fn.canilho.net/v1alpha1
+apiVersion: example.canilho.net/v1alpha1
 kind: XNsMerger
 metadata:
   name: merger-results-xr
@@ -51,9 +51,9 @@ metadata:
   name: merged
   namespace: team-a
   ownerReferences:
-  - apiVersion: resources-merger.fn.canilho.net/v1alpha1
+  - apiVersion: example.canilho.net/v1alpha1
     blockOwnerDeletion: true
     controller: true
     kind: XNsMerger
     name: merger-results-xr
-    uid: f2fb26da-cb10-5df6-b12b-f0e9827b0284
+    uid: db8a137a-fa56-5168-9a01-5088c133cab5

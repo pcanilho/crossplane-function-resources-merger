@@ -1,5 +1,5 @@
 ---
-apiVersion: resources-merger.fn.canilho.net/v1alpha1
+apiVersion: example.canilho.net/v1alpha1
 kind: XMerger
 metadata:
   name: merger-results-xr

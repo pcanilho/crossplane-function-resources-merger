@@ -1,11 +1,11 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: xnsmergers.resources-merger.fn.canilho.net
+  name: xnsmergers.example.canilho.net
 spec:
   # The v2 default. Composed resources are pinned to this namespace.
   scope: Namespaced
-  group: resources-merger.fn.canilho.net
+  group: example.canilho.net
   names:
     kind: XNsMerger
     plural: xnsmergers

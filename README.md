@@ -73,10 +73,10 @@ Define the XRD's `scope` first. It decides how the rest of this page behaves.
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: xmergers.resources-merger.fn.canilho.net
+  name: xmergers.example.canilho.net
 spec:
   scope: Cluster        # or Namespaced, which is the Crossplane v2 default
-  group: resources-merger.fn.canilho.net
+  group: example.canilho.net
   names:
     kind: XMerger
     plural: xmergers
@@ -422,7 +422,7 @@ metadata:
   name: function-resources-merger
 spec:
   compositeTypeRef:
-    apiVersion: resources-merger.fn.canilho.net/v1alpha1
+    apiVersion: example.canilho.net/v1alpha1
     kind: XMerger
   mode: Pipeline
   pipeline:
@@ -471,7 +471,7 @@ spec:
 
 ```yaml
 ---
-apiVersion: resources-merger.fn.canilho.net/v1alpha1
+apiVersion: example.canilho.net/v1alpha1
 kind: XMerger
 metadata:
   name: merger-results-xr
@@ -504,7 +504,7 @@ The `Function` manifest for local rendering is in [`example/functions.yaml`](exa
     labels:
       crossplane.io/composite: merger-results-xr
     ownerReferences:
-      - apiVersion: resources-merger.fn.canilho.net/v1alpha1
+      - apiVersion: example.canilho.net/v1alpha1
         kind: XMerger
         name: merger-results-xr
         controller: true
