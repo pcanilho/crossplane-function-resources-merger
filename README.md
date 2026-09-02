@@ -65,6 +65,47 @@ crossplane:
 
 ## How-to-use
 
+### XRD scope
+
+Define the XRD's `scope` first. It decides how the rest of this page behaves.
+
+```yaml
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: xmergers.resources-merger.fn.canilho.net
+spec:
+  scope: Cluster        # or Namespaced, which is the Crossplane v2 default
+  group: resources-merger.fn.canilho.net
+  names:
+    kind: XMerger
+    plural: xmergers
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+```
+
+|  | `scope: Cluster` | `scope: Namespaced` |
+|---|---|---|
+| `target.namespace` | honoured | **ignored**, pinned to the composite's namespace |
+| Cross-namespace sources | unrestricted | needs `allowCrossNamespace` **and** `allowedSourceNamespaces` |
+| Cluster-scoped targets such as `EnvironmentConfig` | supported | **rejected**, a namespaced composite cannot own one |
+
+Working manifests for both scopes are in [`example/`](example/) and
+[`example/namespaced/`](example/namespaced/); the worked example below walks through the
+cluster-scoped one.
+
+> [!NOTE]
+> `ConfigMap` and `EnvironmentConfig` are used throughout as examples. Any resource with a
+> map-shaped field works; mind the field's own type compatibility when merging into it.
+
 ### Function `Merge` specification
 
 <details>
@@ -104,19 +145,13 @@ Specifies the target resource that will be created/managed by this function.
 > |-------|----------------------------------------------------------------------------|
 > | `key` | The Composition context key the merged result is written to. Required when `context` is set. |
 >
-> This is additive, not an alternative output: the composed resource above is still created either
-> way. It lets a later pipeline step, for example `function-patch-and-transform` or
-> `function-go-templating`, read the merged result straight from `context[key]` without a second
-> lookup of the composed resource. Writing the pipeline context is not unique to this function:
-> `function-extra-resources` and `function-environment-configs` both do it, the latter's own
-> description being "retrieve and merge EnvironmentConfigs into the Context". What differs here is
-> the merge configuration, since neither of those exposes a `mergeStrategy` or the other options
-> above.
+> This is additive: the composed resource is still created either way. It lets a later pipeline
+> step read the merged result straight from `context[key]` without a second lookup of the composed
+> resource.
 >
-> The published value is the merged result itself, regardless of the target's `kind`: it is not
-> stringified for a `ConfigMap` target and not base64-encoded for a `Secret` target. Those
-> encodings exist only because of the composed resource's own Kubernetes API shape, and context is
-> an independent destination.
+> The published value is the merged result itself, whatever the target's `kind`: never stringified
+> for a `ConfigMap`, never base64-encoded for a `Secret`. Those encodings exist only for the
+> composed resource's own Kubernetes API shape; context is an independent destination.
 
 </details>
 
@@ -126,11 +161,10 @@ Specifies the target resource that will be created/managed by this function.
 > same kind does not recreate it, since the target is identified by group and kind only.
 
 > [!NOTE]
-> `readiness` is deliberately a two-value enum, `True` or `False`, with no unset or `Unspecified`
-> option. Crossplane collapses an unspecified readiness to false rather than "unknown", which
-> leaves the composite at `Ready=False, Reason=Creating` with an immediate requeue and an event per
-> reconcile, and `function-auto-ready` cannot rescue it. Set `readiness: "False"` only when another
-> mechanism is responsible for flipping it true.
+> `readiness` is a two-value enum, `True` or `False`, with no unset option: Crossplane collapses an
+> unspecified readiness to false rather than "unknown", leaving the composite at `Ready=False,
+> Reason=Creating` in a requeue loop. Set `readiness: "False"` only when another mechanism is
+> responsible for flipping it true.
 
 > [!NOTE]
 > Under a namespaced composite resource, Crossplane pins the target to the composite's own
@@ -235,30 +269,18 @@ A composite with `spec.tenant: acme` merges `platform/base-config` then `platfor
 composite: `2 of 2 sources merged; resolved names: overlay -> acme`.
 
 > [!IMPORTANT]
-> **Under a namespaced composite, the name is confined to the composite's own namespace: Crossplane
-> pins every read there regardless of what the field path resolves to. Under a cluster-scoped
-> composite, as in this example, there is no composite namespace to confine to; the bound is the
-> static `ref.namespace` the Composition author pinned instead.** Whoever can write the composite
-> chooses the *name*, not the namespace, and Crossplane fetches sources under its own cluster-wide
-> ServiceAccount, which no per-name RBAC restricts. Two things bound that:
+> Whoever can write the composite chooses the resolved **name**, never the namespace, and
+> Crossplane fetches sources under its own cluster-wide ServiceAccount, which no per-name RBAC
+> restricts. Two rules bound that: a source has no `namespaceFromCompositeFieldPath`, so the
+> namespace stays a static string the Composition author pinned; and
+> `ref.nameFromCompositeFieldPath` cannot be combined with `allowCrossNamespace`, which together
+> would let a composite name any resource of that kind inside a permitted foreign namespace.
 >
-> - There is deliberately no `namespaceFromCompositeFieldPath` on a source. The namespace stays a
->   static string chosen by the Composition author.
-> - `ref.nameFromCompositeFieldPath` and `allowCrossNamespace` cannot be combined, and the
->   function rejects a source that sets both. `allowedSourceNamespaces` pins a namespace but not
->   a name; it was written for a statically named source, where the admin pinned both. Together
->   they would let a composite name any resource of that kind inside a permitted foreign
->   namespace, which is exactly the read the pair exists to confine.
->
-> What remains: under a namespaced composite, a source with a resolved name can be steered at any
-> resource of its kind **in the composite's own namespace**, including one the composite's owner
-> could not read directly if their RBAC excludes it by `resourceNames`. Treat a resolved name as
-> reachable by whoever writes the composite, and keep such sources to kinds whose whole namespace
-> that principal may already read.
->
-> Resolution happens where the requirement is declared, so a name that is missing, empty, or not
-> a DNS subdomain omits that source's selector entirely and fails the composition. A source that
-> is never requested is a resource that is never read.
+> What remains: under a namespaced composite a resolved name can be steered at any resource of its
+> kind **in the composite's own namespace**, including one the composite's owner could not read
+> directly if their RBAC excludes it by `resourceNames`. Keep such sources to kinds whose whole
+> namespace that principal may already read. A name that is missing, empty, or not a DNS subdomain
+> omits that source's selector entirely and fails the composition.
 
 ### Placing a source under a subtree
 
@@ -317,106 +339,11 @@ does for a `ConfigMap`. A `Secret` target has every merged value base64-encoded 
   composite's namespace is fatal rather than a warning. Relocating secret material quietly is
   not safe.
 
-### Specification
+### `mergeStrategy`
 
-1. Define the XRD's `scope`. It decides how the rest of this page behaves, and is the first thing to get right.
-    * Example:
-       ```yaml
-       apiVersion: apiextensions.crossplane.io/v2
-       kind: CompositeResourceDefinition
-       metadata:
-         name: xmergers.resources-merger.fn.canilho.net
-       spec:
-         scope: Cluster        # or Namespaced, which is the Crossplane v2 default
-         group: resources-merger.fn.canilho.net
-         names:
-           kind: XMerger
-           plural: xmergers
-         versions:
-           - name: v1alpha1
-             served: true
-             referenceable: true
-             schema:
-               openAPIV3Schema:
-                 type: object
-                 properties:
-                   spec:
-                     type: object
-       ```
-    * |  | `scope: Cluster` | `scope: Namespaced` |
-      |---|---|---|
-      | `target.namespace` | honoured | **ignored**, pinned to the composite's namespace |
-      | Cross-namespace sources | unrestricted | needs `allowCrossNamespace` **and** `allowedSourceNamespaces` |
-      | Cluster-scoped targets such as `EnvironmentConfig` | supported | **rejected**, a namespaced composite cannot own one |
-    * Working manifests for both are in [`example/`](example/) and [`example/namespaced/`](example/namespaced/).
-2. Select which is the target resource that will be created/managed by this function.
-    * Examples: `ConfigMap`, `EnvironmentConfig`, etc.
-    * Using a `ConfigMap`:
-       ```yaml
-       target:
-         namespace: <target-namespace>
-         name: <target-name>
-         apiVersion: v1
-         kind: ConfigMap
-       ```
-3. Identify which resources will be merged into the target resource.
-    * Two `ConfigMap`s and a `EnvironmentConfig`:
-       ```yaml
-       sources:
-         - name: <source-name>
-           ref:
-             namespace: <resource-namespace>
-             name: <resource-name>
-             apiVersion: v1
-             kind: ConfigMap
-         - name: <source-name>
-           ref:
-             namespace: <resource-namespace>
-             name: <resource-name>
-             apiVersion: v1
-             kind: ConfigMap
-         - name: <source-name>
-           ref:
-             name: <resource-name>
-             apiVersion: apiextensions.crossplane.io/v1beta1
-             kind: EnvironmentConfig
-       ```
-4. Define what merge strategy should be used through the `Merge`'s `mergeStrategy` field.
-    * Example:
-       ```yaml
-       mergeStrategy: ForceMergeObjects
-       parseEmbedded: true
-       ```
-5. Observe the merged resource.
-    * Example:
-       ```yaml
-       apiVersion: v1
-       kind: ConfigMap
-       metadata:
-         name: <target-name>
-         namespace: <target-namespace>
-       data:
-         foo: bar
-       ```
-
-> [!NOTE]
-> `ConfigMap` and `EnvironmentConfig` resources are used as an example. This function can be used with any Kubernetes
-> resource that contains a `data` field in its spec.
-> Do note that the data-type compatibility of `data` spec field should to be taken into account when merging results.
-
-> [!TIP]
-> The `Merge`'s `mergeStrategy` field selects how each source merges into the accumulator. The default,
-> `ForceMergeObjects`, has later sources win. `MergeObjects` and `MergeObjectsAppendArrays` are fill-only: the
-> accumulator wins, so an earlier source takes precedence. See the precedence table below.
->
-> ➤ **mergeStrategy** (`string`)
-> | Value | Description |
-> | --- | --- |
-> | `Replace` | Top-level keys the later source sets overwrite the same key in the accumulator wholesale; keys it does not set survive unchanged. |
-> | `MergeObjects` | Deep merge; existing non-empty values win over later sources. |
-> | `ForceMergeObjects` | Deep merge; later sources overwrite existing values. (`default`) |
-> | `MergeObjectsAppendArrays` | `MergeObjects`, and arrays are appended instead of overwritten. |
-> | `ForceMergeObjectsAppendArrays` | `ForceMergeObjects`, and arrays are appended instead of overwritten. |
+Selects how each source folds into the accumulator. The default, `ForceMergeObjects`, has later
+sources win, which is what layering overrides on a base needs. `MergeObjects` and
+`MergeObjectsAppendArrays` are fill-only, so an **earlier** source takes precedence instead.
 
 | Strategy | Conflicting scalar | Nested map | Arrays | Explicit null from a later source |
 |---|---|---|---|---|
@@ -426,17 +353,10 @@ does for a `ConfigMap`. A `Secret` target has every merged value base64-encoded 
 | `MergeObjectsAppendArrays` | **earlier source wins** | recursive, fill-only | appended | **dropped** |
 | `Replace` | later source wins | **replaced wholesale** | replaced | kept |
 
-> [!IMPORTANT]
-> `MergeObjects` and `MergeObjectsAppendArrays` are fill-only: the accumulator wins, so an
-> **earlier** source takes precedence. To layer overrides on top of a base, which is the usual
-> intent, use the default `ForceMergeObjects`.
+### `parseEmbedded`
 
-> [!TIP]
-> ➤ **parseEmbedded** (`boolean`)
-> | Value | Description |
-> | --- | --- |
-> | `true` | String values that are YAML mappings are parsed so their contents deep-merge. |
-> | `false` | String values are merged as-is. (`default`) |
+`true` parses string values that are YAML mappings so their contents deep-merge; `false`, the
+default, merges them as-is. Scope or override it per source with `sources[].parse`.
 
 > [!IMPORTANT]
 > Parsing round-trips a value through a YAML decoder and encoder, which preserves the data but
@@ -458,13 +378,6 @@ does for a `ConfigMap`. A `Secret` target has every merged value base64-encoded 
 > containing more than one YAML document with real content is left unparsed and merged as opaque
 > text. A trailing `---` with nothing after it but whitespace, comments, or an explicit `null`
 > carries no content, so it does not count as a second document and the blob is still parsed.
-
-> [!TIP]
-> ➤ **debug** (`boolean`)
-> | Value | Description |
-> | --- | --- |
-> | `true` | The function will output debug information. |
-> | `false` | The function will not output debug information. (`default`) |
 
 ## Example (`local`)
 
@@ -568,25 +481,7 @@ spec:
 
 </details>
 
-<details> 
-    <summary><i>Function ⚙️</i></summary>
-
-```yaml
----
-apiVersion: pkg.crossplane.io/v1
-kind: Function
-metadata:
-  name: function-resources-merger
-  annotations:
-    # This tells crossplane composition render to connect to the function locally.
-    render.crossplane.io/runtime: Development
-spec:
-  # This is ignored when using the Development runtime.
-  package: function-resources-merger
-
-```
-
-</details>
+The `Function` manifest for local rendering is in [`example/functions.yaml`](example/functions.yaml).
 
 ---
 
@@ -638,11 +533,3 @@ spec:
       --required-resources required-resources.yaml \
       --crossplane-image xpkg.crossplane.io/crossplane/crossplane:v2.4.0
     ```
-
-##### References
-
-* `functions`: https://docs.crossplane.io/latest/concepts/composition-functions
-* `go`: https://go.dev
-* `ko`: https://ko.build
-* `docker`: https://www.docker.com
-* `cli`: https://docs.crossplane.io/latest/cli
