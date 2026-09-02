@@ -2,7 +2,7 @@
 [![Dependabot Updates](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/dependabot/dependabot-updates)
 [![SAST](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/sast.yaml/badge.svg)](https://github.com/pcanilho/crossplane-function-resources-merger/actions/workflows/sast.yaml)
 
-![version](https://img.shields.io/badge/Version-v0.4.0-blue)
+![version](https://img.shields.io/badge/Version-v0.4.1-blue)
 <p align="center" width="100%">
     <img src="https://github.com/pcanilho/crossplane-function-resources-merger/blob/main/docs/images/banner.png?raw=true" width="220"></img>
     <br>
@@ -42,7 +42,7 @@ kind: Function
 metadata:
   name: function-resources-merger
 spec:
-  package: ghcr.io/pcanilho/crossplane-function-resources-merger:v0.4.0
+  package: ghcr.io/pcanilho/crossplane-function-resources-merger:v0.4.1
 EOF
 ```
 
@@ -60,7 +60,7 @@ dependencies:
 crossplane:
   function:
     packages:
-      - ghcr.io/pcanilho/crossplane-function-resources-merger:v0.4.0
+      - ghcr.io/pcanilho/crossplane-function-resources-merger:v0.4.1
 ```
 
 ## How-to-use

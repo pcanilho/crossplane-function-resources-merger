@@ -5,6 +5,31 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-09-02
+
+Maintenance only. The merge behaviour, the `Merge` input schema and the `Merged`
+condition are identical to v0.4.0, so a consumer on v0.4.0 gains nothing
+functionally by upgrading. It exists so consumers can pick up the refreshed
+dependency tree, since this package deliberately publishes no moving tag.
+
+### Changed
+
+- Dependencies bumped: `crossplane-runtime/v2` 2.3.1 to 2.4.0,
+  `alecthomas/kong` 0.9.0 to 1.16.1, `google.golang.org/protobuf` 1.36.11 to
+  1.36.12, `k8s.io/apimachinery` 0.35.3 to 0.36.4 and
+  `sigs.k8s.io/controller-tools` 0.20.1 to 0.21.0. The generated input CRD is
+  unchanged apart from its `controller-gen.kubebuilder.io/version` annotation.
+- `k8s.io/apimachinery` stays on the v0.36 line rather than v0.37.0.
+  `crossplane-runtime` v2.4.0 pins `controller-runtime` v0.23.1, which holds
+  `k8s.io/api` at v0.36, and `k8s.io/api@v0.36` calls `validate.EachSliceVal`,
+  which apimachinery removed in v0.37. The pairing does not compile.
+- CI and the Dockerfile build with Go 1.27.1, up from 1.27.0. The `go.mod` floor
+  stays at 1.27.0: the SAST job runs gosec's pinned 2.29.0 image, which is Go
+  1.27.0 with `GOTOOLCHAIN=local` and cannot build a `go 1.27.1` module.
+- `go fix` rewrites in `fn.go`, both mechanical and neither altering behaviour:
+  a key copy loop is now `maps.Copy`, and a reverse index loop is now
+  `slices.Backward`.
+
 ## [0.4.0] - 2026-09-01
 
 ### Changed
@@ -307,6 +332,7 @@ already there.
 
 See the [release notes](https://github.com/pcanilho/crossplane-function-resources-merger/releases/tag/v0.1.8).
 
+[0.4.1]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/pcanilho/crossplane-function-resources-merger/compare/v0.2.0...v0.3.0
