@@ -24,6 +24,6 @@ jobs:
       #
       # Was @master, a mutable ref executing with this workflow's token.
       - name: Run Gosec Security Scanner
-        uses: securego/gosec@4d447d9bf750776ec436724dcaf728e5c629f2f6 # post-v2.29.0
+        uses: securego/gosec@8075fd2e520d33330afe168f26fc7a91f57f2cbc # post-v2.29.0
         with:
           args: ./...
